@@ -273,11 +273,11 @@ export default function MemberDashboard() {
                 Quick Actions
               </h3>
               
-              <div className="space-y-3">
+             <div className="space-y-3">
                 {[
-                  { icon: CalendarDays, text: 'Manage Daily Meals', link: '/member/meals', color: isDark ? 'text-emerald-400' : 'text-emerald-600' },
-                  { icon: BellRing, text: 'View Announcements', link: '/member/notices', color: isDark ? 'text-amber-400' : 'text-amber-600' },
-                  { icon: UserCircle, text: 'My Profile', link: '/member/profile', color: isDark ? 'text-indigo-400' : 'text-indigo-600' },
+                  { icon: CalendarDays, text: 'Manage Daily Meals', link: '/meals', color: isDark ? 'text-emerald-400' : 'text-emerald-600' },
+                  { icon: BellRing, text: 'View Announcements', link: '/notices', color: isDark ? 'text-amber-400' : 'text-amber-600' },
+                  { icon: UserCircle, text: 'My Profile', link: '/profile', color: isDark ? 'text-indigo-400' : 'text-indigo-600' },
                 ].map((action, i) => {
                   const Icon = action.icon;
                   return (

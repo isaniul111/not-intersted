@@ -44,11 +44,12 @@ export default function MemberLayout({ children }: MemberLayoutProps) {
     setTheme(prev => (prev === 'dark' ? 'light' : 'dark'));
   };
 
+  // 🔴 FIX: Removed '/member' from the paths to match App.tsx routes
   const menuItems = [
-    { icon: LayoutDashboard, label: 'Dashboard', path: '/member/dashboard' },
-    { icon: UtensilsCrossed, label: 'Meals', path: '/member/meals' },
-    { icon: Bell, label: 'Notices', path: '/member/notices' },
-    { icon: User, label: 'Profile', path: '/member/profile' },
+    { icon: LayoutDashboard, label: 'Dashboard', path: '/dashboard' },
+    { icon: UtensilsCrossed, label: 'Meals', path: '/meals' },
+    { icon: Bell, label: 'Notices', path: '/notices' },
+    { icon: User, label: 'Profile', path: '/profile' },
   ];
 
   const handleSignOut = async () => {
