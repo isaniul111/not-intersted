@@ -1,85 +1,23 @@
 import { useEffect, useState } from 'react';
-import { useAuth } from '../../context/AuthContext';
-import { supabase, Notice } from '../../lib/supabase';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import AdminLayout from '../../components/admin/AdminLayout';
-import { Plus, Trash2, Megaphone, Bell, Calendar, X, Activity } from 'lucide-react';
+import { Plus, Trash2, Megaphone, Bell, Calendar, Activity } from 'lucide-react';
+
+// একই ফোল্ডার থেকে কাস্টম হুক ও মডাল ইম্পোর্ট
+import { useNotices } from './useNotices';
+import { NoticeModal } from './NoticeModal';
 
 export default function NoticesManagement() {
-  const { profile } = useAuth();
-  const [notices, setNotices] = useState<Notice[]>([]);
-  const [loading, setLoading] = useState(true);
-  
-  // Modal & Form State
+  const { notices, loading, addNotice, deleteNotice } = useNotices();
   const [showModal, setShowModal] = useState(false);
-  const [formData, setFormData] = useState({
-    title: '',
-    message: '',
-  });
-
-  // Theme Sync
   const [isDark, setIsDark] = useState(() => localStorage.getItem('adminTheme') !== 'light');
 
+  // Theme Sync
   useEffect(() => {
     const checkTheme = () => setIsDark(localStorage.getItem('adminTheme') !== 'light');
     const interval = setInterval(checkTheme, 50);
     return () => clearInterval(interval);
   }, []);
-
-  useEffect(() => {
-    if (profile) {
-      fetchNotices();
-    }
-  }, [profile]);
-
-  const fetchNotices = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('notices')
-        .select('*')
-        .eq('hostel_id', (profile as any).id)
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-      setNotices(data || []);
-    } catch (error) {
-      console.error('Error fetching notices:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleAddNotice = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      const { error } = await supabase.from('notices').insert({
-        hostel_id: (profile as any).id,
-        title: formData.title,
-        message: formData.message,
-      });
-
-      if (error) throw error;
-
-      await fetchNotices();
-      setShowModal(false);
-      setFormData({ title: '', message: '' });
-    } catch (error: any) {
-      alert(error.message);
-    }
-  };
-
-  const handleDeleteNotice = async (noticeId: string) => {
-    if (!confirm('Are you sure you want to delete this notice? It will be removed for all members.')) return;
-
-    try {
-      const { error } = await supabase.from('notices').delete().eq('id', noticeId);
-
-      if (error) throw error;
-      await fetchNotices();
-    } catch (error: any) {
-      alert(error.message);
-    }
-  };
 
   // Framer Motion Variants
   const containerVariants = {
@@ -179,7 +117,7 @@ export default function NoticesManagement() {
 
                       {/* Delete Action */}
                       <button
-                        onClick={() => handleDeleteNotice(notice.id)}
+                        onClick={() => deleteNotice(notice.id)}
                         className={`flex-shrink-0 p-2.5 rounded-xl opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-all duration-200 ${
                           isDark 
                             ? 'bg-rose-500/10 hover:bg-rose-500/20 text-rose-400' 
@@ -215,108 +153,13 @@ export default function NoticesManagement() {
           )}
         </motion.div>
 
-        {/* MODAL: POST NOTICE */}
-        <AnimatePresence>
-          {showModal && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                onClick={() => setShowModal(false)}
-                className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-              />
-              <motion.div
-                initial={{ opacity: 0, scale: 0.95, y: 20 }}
-                animate={{ opacity: 1, scale: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.95, y: 20 }}
-                className={`relative w-full max-w-lg p-6 sm:p-8 rounded-3xl shadow-2xl border ${
-                  isDark ? 'bg-slate-900 border-white/10' : 'bg-white border-slate-200'
-                }`}
-              >
-                <div className="flex items-center justify-between mb-6">
-                  <div className="flex items-center gap-3">
-                    <div className={`p-2 rounded-xl ${isDark ? 'bg-indigo-500/20 text-indigo-400' : 'bg-indigo-100 text-indigo-600'}`}>
-                      <Megaphone className="w-5 h-5" />
-                    </div>
-                    <h2 className={`text-2xl font-bold tracking-tight ${isDark ? 'text-white' : 'text-slate-900'}`}>
-                      New Announcement
-                    </h2>
-                  </div>
-                  <button 
-                    onClick={() => setShowModal(false)}
-                    className={`p-2 rounded-full transition-colors ${
-                      isDark ? 'hover:bg-white/10 text-slate-400' : 'hover:bg-slate-100 text-slate-500'
-                    }`}
-                  >
-                    <X className="w-5 h-5" />
-                  </button>
-                </div>
-
-                <form onSubmit={handleAddNotice} className="space-y-5">
-                  {/* Title */}
-                  <div>
-                    <label className={`block text-xs font-bold uppercase tracking-widest mb-2 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
-                      Notice Title
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      value={formData.title}
-                      onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                      placeholder="e.g., Water Supply Maintenance"
-                      className={`w-full px-4 py-3.5 rounded-xl border focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all font-medium ${
-                        isDark 
-                          ? 'bg-slate-800/50 border-white/10 text-white placeholder-slate-500' 
-                          : 'bg-slate-50 border-slate-200 text-slate-900 placeholder-slate-400'
-                      }`}
-                    />
-                  </div>
-
-                  {/* Message */}
-                  <div>
-                    <label className={`block text-xs font-bold uppercase tracking-widest mb-2 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
-                      Message Content
-                    </label>
-                    <textarea
-                      required
-                      value={formData.message}
-                      onChange={(e) => setFormData({ ...formData, message: e.target.value })}
-                      rows={6}
-                      placeholder="Write the full details of your announcement here..."
-                      className={`w-full px-4 py-3.5 rounded-xl border focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all resize-none font-medium ${
-                        isDark 
-                          ? 'bg-slate-800/50 border-white/10 text-white placeholder-slate-500' 
-                          : 'bg-slate-50 border-slate-200 text-slate-900 placeholder-slate-400'
-                      }`}
-                    />
-                  </div>
-
-                  {/* Actions */}
-                  <div className="flex gap-3 pt-4">
-                    <button
-                      type="button"
-                      onClick={() => setShowModal(false)}
-                      className={`flex-1 px-4 py-3.5 rounded-xl font-bold transition-all duration-200 ${
-                        isDark 
-                          ? 'bg-white/5 hover:bg-white/10 text-white' 
-                          : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
-                      }`}
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="submit"
-                      className="flex-1 px-4 py-3.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl shadow-lg shadow-indigo-500/30 hover:shadow-indigo-500/50 hover:-translate-y-0.5 transition-all duration-200"
-                    >
-                      Broadcast
-                    </button>
-                  </div>
-                </form>
-              </motion.div>
-            </div>
-          )}
-        </AnimatePresence>
+        {/* MODAL: POST NOTICE (ইম্পোর্ট করা কম্পোনেন্ট) */}
+        <NoticeModal 
+          isOpen={showModal} 
+          onClose={() => setShowModal(false)} 
+          onSubmit={addNotice} 
+          isDark={isDark} 
+        />
 
       </div>
     </AdminLayout>

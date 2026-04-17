@@ -1,4 +1,4 @@
-import { Navigate } from 'react-router-dom';
+import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
 type ProtectedRouteProps = {
@@ -8,6 +8,7 @@ type ProtectedRouteProps = {
 
 export default function ProtectedRoute({ children, requiredRole }: ProtectedRouteProps) {
   const { user, role, loading } = useAuth();
+  const location = useLocation();
 
   if (loading) {
     return (
@@ -24,6 +25,9 @@ export default function ProtectedRoute({ children, requiredRole }: ProtectedRout
   if (requiredRole && role !== requiredRole) {
     return <Navigate to={role === 'admin' ? '/admin/dashboard' : '/dashboard'} replace />;
   }
+
+  // User jei page e successfully access pacche seta localStorage e save kore rakhchi
+  localStorage.setItem('lastVisitedPage', location.pathname);
 
   return <>{children}</>;
 }

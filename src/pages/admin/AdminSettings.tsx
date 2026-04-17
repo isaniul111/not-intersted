@@ -1,15 +1,23 @@
 import { useState, useEffect } from 'react';
-import { useAuth } from '../../context/AuthContext';
-import { supabase } from '../../lib/supabase';
 import { motion } from 'framer-motion';
 import AdminLayout from '../../components/admin/AdminLayout';
 import { Save, Lock, User, Building2, Mail, ShieldCheck } from 'lucide-react';
 
+// কাস্টম হুক এবং কম্পোনেন্ট ইম্পোর্ট
+import { useAdminSettings } from './useAdminSettings';
+import { FeedbackMessage } from './FeedbackMessage';
+
 export default function AdminSettings() {
-  const { profile, refreshProfile } = useAuth();
-  const [loading, setLoading] = useState(false);
+  const { 
+    profile, 
+    loading, 
+    profileMessage, 
+    passwordMessage, 
+    updateProfile, 
+    changePassword 
+  } = useAdminSettings();
   
-  // Form States
+  // Local Form States
   const [formData, setFormData] = useState({
     hostelName: (profile as any)?.hostel_name || '',
     fullName: (profile as any)?.full_name || '',
@@ -19,10 +27,6 @@ export default function AdminSettings() {
     newPassword: '',
     confirmPassword: '',
   });
-
-  // Success/Error Feedback States
-  const [profileMessage, setProfileMessage] = useState({ type: '', text: '' });
-  const [passwordMessage, setPasswordMessage] = useState({ type: '', text: '' });
 
   // Theme Sync
   const [isDark, setIsDark] = useState(() => localStorage.getItem('adminTheme') !== 'light');
@@ -35,64 +39,16 @@ export default function AdminSettings() {
 
   const handleUpdateProfile = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
-    setProfileMessage({ type: '', text: '' });
-
-    try {
-      const { error } = await supabase
-        .from('admins')
-        .update({
-          hostel_name: formData.hostelName,
-          full_name: formData.fullName,
-        })
-        .eq('id', (profile as any).id);
-
-      if (error) throw error;
-
-      await refreshProfile();
-      setProfileMessage({ type: 'success', text: 'Profile updated successfully.' });
-      
-      // Clear success message after 3 seconds
-      setTimeout(() => setProfileMessage({ type: '', text: '' }), 3000);
-    } catch (error: any) {
-      setProfileMessage({ type: 'error', text: error.message });
-    } finally {
-      setLoading(false);
-    }
+    await updateProfile(formData.hostelName, formData.fullName);
   };
 
   const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault();
-    setPasswordMessage({ type: '', text: '' });
-
-    if (passwordData.newPassword !== passwordData.confirmPassword) {
-      setPasswordMessage({ type: 'error', text: 'Passwords do not match.' });
-      return;
-    }
-
-    if (passwordData.newPassword.length < 6) {
-      setPasswordMessage({ type: 'error', text: 'Password must be at least 6 characters.' });
-      return;
-    }
-
-    setLoading(true);
-
-    try {
-      const { error } = await supabase.auth.updateUser({
-        password: passwordData.newPassword,
-      });
-
-      if (error) throw error;
-
-      setPasswordMessage({ type: 'success', text: 'Password changed successfully.' });
+    const success = await changePassword(passwordData.newPassword, passwordData.confirmPassword);
+    
+    // পাসওয়ার্ড সফলভাবে চেঞ্জ হলে ফিল্ডগুলো ফাঁকা করে দিব
+    if (success) {
       setPasswordData({ newPassword: '', confirmPassword: '' });
-      
-      // Clear success message after 3 seconds
-      setTimeout(() => setPasswordMessage({ type: '', text: '' }), 3000);
-    } catch (error: any) {
-      setPasswordMessage({ type: 'error', text: error.message });
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -147,15 +103,7 @@ export default function AdminSettings() {
               </h2>
             </div>
 
-            {profileMessage.text && (
-              <div className={`mb-6 p-4 rounded-xl text-sm font-medium border ${
-                profileMessage.type === 'success' 
-                  ? (isDark ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : 'bg-emerald-50 border-emerald-200 text-emerald-600')
-                  : (isDark ? 'bg-rose-500/10 border-rose-500/20 text-rose-400' : 'bg-rose-50 border-rose-200 text-rose-600')
-              }`}>
-                {profileMessage.text}
-              </div>
-            )}
+            <FeedbackMessage message={profileMessage} isDark={isDark} />
 
             <form onSubmit={handleUpdateProfile} className="space-y-5">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
@@ -239,15 +187,7 @@ export default function AdminSettings() {
               </h2>
             </div>
 
-            {passwordMessage.text && (
-              <div className={`mb-6 p-4 rounded-xl text-sm font-medium border ${
-                passwordMessage.type === 'success' 
-                  ? (isDark ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : 'bg-emerald-50 border-emerald-200 text-emerald-600')
-                  : (isDark ? 'bg-rose-500/10 border-rose-500/20 text-rose-400' : 'bg-rose-50 border-rose-200 text-rose-600')
-              }`}>
-                {passwordMessage.text}
-              </div>
-            )}
+            <FeedbackMessage message={passwordMessage} isDark={isDark} />
 
             <form onSubmit={handleChangePassword} className="space-y-5">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">

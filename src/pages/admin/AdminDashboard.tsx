@@ -1,7 +1,5 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../../context/AuthContext';
-import { supabase } from '../../lib/supabase';
 import { motion } from 'framer-motion';
 import AdminLayout from '../../components/admin/AdminLayout';
 import {
@@ -13,54 +11,17 @@ import {
   CalendarDays,
   BellRing,
   ArrowRight,
-  Activity
 } from 'lucide-react';
 
-// কাস্টম হার্টবিট অ্যানিমেশন কম্পোনেন্ট
-const AnimatedHeartbeat = ({ isDark }: { isDark: boolean }) => {
-  return (
-    <div className="relative w-20 h-12 flex items-center justify-center">
-      {/* Background Glow */}
-      <div className={`absolute inset-0 blur-xl rounded-full opacity-50 ${isDark ? 'bg-emerald-500/30' : 'bg-emerald-400/40'} animate-pulse`} />
-      
-      {/* ECG SVG Line */}
-      <svg viewBox="0 0 100 50" className={`w-full h-full relative z-10 ${isDark ? 'stroke-emerald-400' : 'stroke-emerald-500'}`}>
-        <motion.path
-          d="M 5,25 L 25,25 L 35,10 L 50,45 L 60,5 L 70,30 L 80,25 L 95,25"
-          fill="none"
-          strokeWidth="4"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          initial={{ pathLength: 0, opacity: 0.2 }}
-          animate={{ 
-            pathLength: [0, 1, 1], 
-            opacity: [0, 1, 1, 0] 
-          }}
-          transition={{
-            duration: 2.5,
-            repeat: Infinity,
-            ease: "easeInOut",
-            times: [0, 0.4, 0.8, 1]
-          }}
-        />
-      </svg>
-    </div>
-  );
-};
+// একই ফোল্ডার থেকে ইম্পোর্ট
+import { useAdminStats } from './useAdminStats';
+import { AnimatedHeartbeat } from './AnimatedHeartbeat';
 
 export default function AdminDashboard() {
-  const { profile } = useAuth();
   const navigate = useNavigate();
-
-  const [loading, setLoading] = useState(true);
+  const { stats, loading, profile } = useAdminStats(); 
+  
   const [isDark, setIsDark] = useState(() => localStorage.getItem('adminTheme') !== 'light');
-
-  const [stats, setStats] = useState({
-    totalMembers: 0,
-    totalMeals: 0,
-    totalBazarExpense: 0,
-    avgMealCost: 0,
-  });
 
   // থিম সিঙ্ক করার জন্য
   useEffect(() => {
@@ -68,58 +29,6 @@ export default function AdminDashboard() {
     const interval = setInterval(checkTheme, 50);
     return () => clearInterval(interval);
   }, []);
-
-  // ডেটা ফেচ
-  useEffect(() => {
-    if (profile) fetchStats();
-  }, [profile]);
-
-  const fetchStats = async () => {
-    try {
-      const hostelId = (profile as any).id;
-
-      const { count: membersCount } = await supabase
-        .from('members')
-        .select('*', { count: 'exact', head: true })
-        .eq('hostel_id', hostelId);
-
-      const { data: mealRecords } = await supabase
-        .from('meal_records')
-        .select('day_meal, night_meal, meal_id!inner(hostel_id)')
-        .eq('meal_id.hostel_id', hostelId);
-
-      const totalMeals = mealRecords?.reduce((sum, record) => {
-        return sum + (record.day_meal ? 1 : 0) + (record.night_meal ? 1 : 0);
-      }, 0) || 0;
-
-      const { data: members } = await supabase
-        .from('members')
-        .select('bazar_amount')
-        .eq('hostel_id', hostelId);
-
-      const { data: expenses } = await supabase
-        .from('expenses')
-        .select('amount')
-        .eq('hostel_id', hostelId);
-
-      const totalBazar = members?.reduce((sum, m) => sum + Number(m.bazar_amount), 0) || 0;
-      const totalExpenses = expenses?.reduce((sum, e) => sum + Number(e.amount), 0) || 0;
-      const totalBazarExpense = totalBazar + totalExpenses;
-
-      const avgMealCost = totalMeals > 0 ? totalBazarExpense / totalMeals : 0;
-
-      setStats({
-        totalMembers: membersCount || 0,
-        totalMeals,
-        totalBazarExpense,
-        avgMealCost,
-      });
-    } catch (error) {
-      console.error('Error fetching stats:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const containerVariants = {
     hidden: { opacity: 0 },

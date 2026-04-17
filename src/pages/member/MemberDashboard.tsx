@@ -1,7 +1,5 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../../context/AuthContext';
-import { supabase } from '../../lib/supabase';
 import { motion } from 'framer-motion';
 import MemberLayout from '../../components/member/MemberLayout';
 import { 
@@ -16,47 +14,15 @@ import {
   UserCircle
 } from 'lucide-react';
 
-type MemberStats = {
-  totalMeals: number;
-  mealCost: number;
-  avgMealRate: number;
-  bazarAmount: number;
-};
-
-// Animated Heartbeat from Admin Dashboard
-const AnimatedHeartbeat = ({ isDark }: { isDark: boolean }) => {
-  return (
-    <div className="relative w-20 h-12 flex items-center justify-center">
-      <div className={`absolute inset-0 blur-xl rounded-full opacity-50 ${isDark ? 'bg-indigo-500/30' : 'bg-indigo-400/40'} animate-pulse`} />
-      <svg viewBox="0 0 100 50" className={`w-full h-full relative z-10 ${isDark ? 'stroke-indigo-400' : 'stroke-indigo-500'}`}>
-        <motion.path
-          d="M 5,25 L 25,25 L 35,10 L 50,45 L 60,5 L 70,30 L 80,25 L 95,25"
-          fill="none"
-          strokeWidth="4"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          initial={{ pathLength: 0, opacity: 0.2 }}
-          animate={{ pathLength: [0, 1, 1], opacity: [0, 1, 1, 0] }}
-          transition={{ duration: 2.5, repeat: Infinity, ease: "easeInOut", times: [0, 0.4, 0.8, 1] }}
-        />
-      </svg>
-    </div>
-  );
-};
+// কাস্টম হুক ও কম্পোনেন্ট ইম্পোর্ট
+import { useMemberStats } from './useMemberStats';
+import { AnimatedHeartbeat } from './AnimatedHeartbeat';
 
 export default function MemberDashboard() {
-  const { profile } = useAuth();
   const navigate = useNavigate();
+  const { profile, loading, stats } = useMemberStats();
   
-  const [loading, setLoading] = useState(true);
   const [isDark, setIsDark] = useState(() => localStorage.getItem('memberTheme') !== 'light');
-
-  const [stats, setStats] = useState<MemberStats>({
-    totalMeals: 0,
-    mealCost: 0,
-    avgMealRate: 0,
-    bazarAmount: 0,
-  });
 
   // Sync Theme
   useEffect(() => {
@@ -64,59 +30,6 @@ export default function MemberDashboard() {
     const interval = setInterval(checkTheme, 50);
     return () => clearInterval(interval);
   }, []);
-
-  useEffect(() => {
-    if (profile) fetchStats();
-  }, [profile]);
-
-  const fetchStats = async () => {
-    try {
-      const memberId = (profile as any).id;
-      const hostelId = (profile as any).hostel_id;
-
-      const { data: memberMealRecords } = await supabase
-        .from('meal_records')
-        .select('day_meal, night_meal')
-        .eq('member_id', memberId);
-
-      const totalMeals = memberMealRecords?.reduce((sum, record) => sum + (record.day_meal ? 1 : 0) + (record.night_meal ? 1 : 0), 0) || 0;
-
-      const { data: allMealRecords } = await supabase
-        .from('meal_records')
-        .select('day_meal, night_meal, meal_id!inner(hostel_id)')
-        .eq('meal_id.hostel_id', hostelId);
-
-      const totalHostelMeals = allMealRecords?.reduce((sum, record) => sum + (record.day_meal ? 1 : 0) + (record.night_meal ? 1 : 0), 0) || 0;
-
-      const { data: members } = await supabase
-        .from('members')
-        .select('bazar_amount')
-        .eq('hostel_id', hostelId);
-
-      const { data: expenses } = await supabase
-        .from('expenses')
-        .select('amount')
-        .eq('hostel_id', hostelId);
-
-      const totalBazar = members?.reduce((sum, m) => sum + Number(m.bazar_amount), 0) || 0;
-      const totalExpenses = expenses?.reduce((sum, e) => sum + Number(e.amount), 0) || 0;
-      const totalBazarExpense = totalBazar + totalExpenses;
-
-      const avgMealRate = totalHostelMeals > 0 ? totalBazarExpense / totalHostelMeals : 0;
-      const mealCost = totalMeals * avgMealRate;
-
-      setStats({
-        totalMeals,
-        mealCost,
-        avgMealRate,
-        bazarAmount: Number((profile as any).bazar_amount),
-      });
-    } catch (error) {
-      console.error('Error fetching stats:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   // Framer Motion Variants
   const containerVariants = {
