@@ -33,6 +33,10 @@ export type Meal = {
   hostel_id: string;
   date: string;
   created_at: string;
+  day_menu_name?: string | null;
+  day_menu_image?: string | null;
+  night_menu_name?: string | null;
+  night_menu_image?: string | null;
 };
 
 export type MealRecord = {
@@ -58,5 +62,11 @@ export type Notice = {
   hostel_id: string;
   title: string;
   message: string;
+  created_at: string;
+};
+export type FoodItem = {
+  id: string;
+  name: string;
+  image_url: string;
   created_at: string;
 };

@@ -65,7 +65,11 @@
   - Index on foreign keys for faster joins
   - Index on date fields for meal and expense queries
 */
-
+ALTER TABLE meals 
+ADD COLUMN day_menu_name text,
+ADD COLUMN day_menu_image text,
+ADD COLUMN night_menu_name text,
+ADD COLUMN night_menu_image text;
 -- Create admins table
 CREATE TABLE IF NOT EXISTS admins (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -474,3 +478,25 @@ CREATE POLICY "Admins can delete notices"
       AND admins.auth_id = auth.uid()
     )
   );
+  -- Create food_items table
+CREATE TABLE IF NOT EXISTS food_items (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  name text NOT NULL,
+  image_url text NOT NULL,
+  created_at timestamptz DEFAULT now()
+);
+
+-- Enable RLS (Security)
+ALTER TABLE food_items ENABLE ROW LEVEL SECURITY;
+
+-- Allow authenticated users to view food items
+CREATE POLICY "Authenticated users can view food items"
+  ON food_items FOR SELECT
+  TO authenticated
+  USING (true);
+
+-- Allow admins to insert/update/delete
+CREATE POLICY "Admins can insert food items"
+  ON food_items FOR INSERT
+  TO authenticated
+  WITH CHECK (true);

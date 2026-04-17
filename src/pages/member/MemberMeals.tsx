@@ -8,6 +8,11 @@ import { Calendar, CheckCircle, Circle, Utensils, Sun, Moon, Activity } from 'lu
 type MealWithRecord = {
   id: string;
   date: string;
+  // NEW: Added menu fields
+  day_menu_name?: string | null;
+  day_menu_image?: string | null;
+  night_menu_name?: string | null;
+  night_menu_image?: string | null;
   record: {
     id: string;
     day_meal: boolean;
@@ -60,6 +65,11 @@ export default function MemberMeals() {
           return {
             id: meal.id,
             date: meal.date,
+            // NEW: Mapping the menu data
+            day_menu_name: meal.day_menu_name,
+            day_menu_image: meal.day_menu_image,
+            night_menu_name: meal.night_menu_name,
+            night_menu_image: meal.night_menu_image,
             record: record || null,
           };
         })
@@ -216,7 +226,7 @@ export default function MemberMeals() {
                     {/* Day Meal Button */}
                     <button
                       onClick={() => toggleMeal(meal.id, meal.record?.id, 'day')}
-                      className={`group relative overflow-hidden flex items-center justify-center gap-3 p-5 rounded-2xl border-2 transition-all duration-300 ${
+                      className={`group relative overflow-hidden flex flex-col items-center justify-center gap-3 p-5 rounded-2xl border-2 transition-all duration-300 ${
                         meal.record?.day_meal
                           ? (isDark 
                               ? 'bg-amber-500/10 border-amber-500/30 text-amber-400 shadow-[inset_0_0_20px_rgba(245,158,11,0.05)]' 
@@ -231,14 +241,31 @@ export default function MemberMeals() {
                         <div className="absolute inset-0 bg-gradient-to-br from-amber-500/5 to-transparent pointer-events-none" />
                       )}
                       
-                      {meal.record?.day_meal ? (
-                        <CheckCircle className="w-5 h-5 fill-current text-amber-500" strokeWidth={1.5} />
-                      ) : (
-                        <Circle className="w-5 h-5 opacity-50 group-hover:opacity-100 transition-opacity" strokeWidth={1.5} />
-                      )}
+                      {/* MENU IMAGE OR ICON */}
+                      <div className="relative z-10 flex flex-col items-center gap-2">
+                        {meal.day_menu_image ? (
+                          <img 
+                            src={meal.day_menu_image} 
+                            alt="Day Menu" 
+                            className="w-16 h-16 sm:w-20 sm:h-20 rounded-full object-cover border-4 border-amber-500/30 shadow-lg group-hover:scale-105 transition-transform" 
+                          />
+                        ) : (
+                          <div className={`p-4 rounded-full ${isDark ? 'bg-slate-800' : 'bg-slate-100'}`}>
+                            <Utensils className="w-8 h-8 opacity-40" />
+                          </div>
+                        )}
+
+                        <p className={`font-bold text-center mt-1 ${isDark ? 'text-white' : 'text-slate-900'}`}>
+                          {meal.day_menu_name || 'Menu Not Set Yet'}
+                        </p>
+                      </div>
                       
-                      <div className="flex items-center gap-2">
-                        <Sun className={`w-4 h-4 ${meal.record?.day_meal ? '' : 'opacity-50 group-hover:opacity-100 transition-opacity'}`} />
+                      <div className="flex items-center gap-2 mt-2 relative z-10 bg-black/5 dark:bg-black/20 px-4 py-1.5 rounded-full">
+                        {meal.record?.day_meal ? (
+                          <CheckCircle className="w-5 h-5 fill-current text-amber-500" strokeWidth={1.5} />
+                        ) : (
+                          <Circle className="w-5 h-5 opacity-50 group-hover:opacity-100 transition-opacity" strokeWidth={1.5} />
+                        )}
                         <span className="font-bold tracking-wide">Day Meal</span>
                       </div>
                     </button>
@@ -246,7 +273,7 @@ export default function MemberMeals() {
                     {/* Night Meal Button */}
                     <button
                       onClick={() => toggleMeal(meal.id, meal.record?.id, 'night')}
-                      className={`group relative overflow-hidden flex items-center justify-center gap-3 p-5 rounded-2xl border-2 transition-all duration-300 ${
+                      className={`group relative overflow-hidden flex flex-col items-center justify-center gap-3 p-5 rounded-2xl border-2 transition-all duration-300 ${
                         meal.record?.night_meal
                           ? (isDark 
                               ? 'bg-indigo-500/10 border-indigo-500/30 text-indigo-400 shadow-[inset_0_0_20px_rgba(99,102,241,0.05)]' 
@@ -261,14 +288,31 @@ export default function MemberMeals() {
                         <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/5 to-transparent pointer-events-none" />
                       )}
 
-                      {meal.record?.night_meal ? (
-                        <CheckCircle className="w-5 h-5 fill-current text-indigo-500" strokeWidth={1.5} />
-                      ) : (
-                        <Circle className="w-5 h-5 opacity-50 group-hover:opacity-100 transition-opacity" strokeWidth={1.5} />
-                      )}
+                      {/* MENU IMAGE OR ICON */}
+                      <div className="relative z-10 flex flex-col items-center gap-2">
+                        {meal.night_menu_image ? (
+                          <img 
+                            src={meal.night_menu_image} 
+                            alt="Night Menu" 
+                            className="w-16 h-16 sm:w-20 sm:h-20 rounded-full object-cover border-4 border-indigo-500/30 shadow-lg group-hover:scale-105 transition-transform" 
+                          />
+                        ) : (
+                          <div className={`p-4 rounded-full ${isDark ? 'bg-slate-800' : 'bg-slate-100'}`}>
+                            <Utensils className="w-8 h-8 opacity-40" />
+                          </div>
+                        )}
+
+                        <p className={`font-bold text-center mt-1 ${isDark ? 'text-white' : 'text-slate-900'}`}>
+                          {meal.night_menu_name || 'Menu Not Set Yet'}
+                        </p>
+                      </div>
                       
-                      <div className="flex items-center gap-2">
-                        <Moon className={`w-4 h-4 ${meal.record?.night_meal ? '' : 'opacity-50 group-hover:opacity-100 transition-opacity'}`} />
+                      <div className="flex items-center gap-2 mt-2 relative z-10 bg-black/5 dark:bg-black/20 px-4 py-1.5 rounded-full">
+                        {meal.record?.night_meal ? (
+                          <CheckCircle className="w-5 h-5 fill-current text-indigo-500" strokeWidth={1.5} />
+                        ) : (
+                          <Circle className="w-5 h-5 opacity-50 group-hover:opacity-100 transition-opacity" strokeWidth={1.5} />
+                        )}
                         <span className="font-bold tracking-wide">Night Meal</span>
                       </div>
                     </button>
