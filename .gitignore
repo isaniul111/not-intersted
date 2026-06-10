@@ -1,4 +1,7 @@
-logs
+# =========================
+# Logs
+# =========================
+logs/
 *.log
 npm-debug.log*
 yarn-debug.log*
@@ -6,18 +9,51 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-node_modules
-dist
-dist-ssr
+# =========================
+# Dependencies
+# =========================
+node_modules/
+
+# =========================
+# Build Outputs
+# =========================
+dist/
+dist-ssr/
+
+# =========================
+# Environment Files
+# =========================
+.env
+.env.*
 *.local
 
+# =========================
+# Editor & IDE Files
+# =========================
 .vscode/*
 !.vscode/extensions.json
-.idea
+.idea/
+
+# =========================
+# OS / System Files
+# =========================
 .DS_Store
+Thumbs.db
+
+# =========================
+# Visual Studio / Misc
+# =========================
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
 *.sw?
-.env
+
+# =========================
+# Optional (your custom rules)
+# =========================
+# src er moddhe sob folder ignore (if needed)
+src/*/
+
+# supabase ignore korte chaile:
+supabase/
