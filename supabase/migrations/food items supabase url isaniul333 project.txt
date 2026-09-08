@@ -1,0 +1,43 @@
+https://pwlucglqqmjugvzzuiep.supabase.co/storage/v1/object/public/food-items/alu%20bhorta%20bangladesh.png
+https://pwlucglqqmjugvzzuiep.supabase.co/storage/v1/object/public/food-items/bangladeshi%20polao%20rice.jpg
+https://pwlucglqqmjugvzzuiep.supabase.co/storage/v1/object/public/food-items/beef%20bhuri%20curry%20bangladesh.jpg
+https://pwlucglqqmjugvzzuiep.supabase.co/storage/v1/object/public/food-items/beef%20curry%20bangladesh.jpg
+https://pwlucglqqmjugvzzuiep.supabase.co/storage/v1/object/public/food-items/beef%20curry%20bangladesh.jpg
+https://pwlucglqqmjugvzzuiep.supabase.co/storage/v1/object/public/food-items/beef%20tehari%20bangladesh.jpg
+https://pwlucglqqmjugvzzuiep.supabase.co/storage/v1/object/public/food-items/beef%20kala%20bhuna%20traditional.jpg
+https://pwlucglqqmjugvzzuiep.supabase.co/storage/v1/object/public/food-items/bhuna%20khichuri%20bangladesh.jpg
+https://pwlucglqqmjugvzzuiep.supabase.co/storage/v1/object/public/food-items/chicken%20biryani%20plate.jpg
+https://pwlucglqqmjugvzzuiep.supabase.co/storage/v1/object/public/food-items/chicken%20curry%20bangladeshi%20style.jpg
+https://pwlucglqqmjugvzzuiep.supabase.co/storage/v1/object/public/food-items/chicken%20korma%20curry.jpg
+https://pwlucglqqmjugvzzuiep.supabase.co/storage/v1/object/public/food-items/chicken%20roast%20bangladesh%20wedding.jpg
+https://pwlucglqqmjugvzzuiep.supabase.co/storage/v1/object/public/food-items/chicken%20roast%20bangladesh%20wedding.jpg
+https://pwlucglqqmjugvzzuiep.supabase.co/storage/v1/object/public/food-items/choto%20mach%20chorchori%20bangladesh.jpg
+https://pwlucglqqmjugvzzuiep.supabase.co/storage/v1/object/public/food-items/crispy%20fried%20chicken%20pieces.jpg
+https://pwlucglqqmjugvzzuiep.supabase.co/storage/v1/object/public/food-items/egg%20curry%20bangladesh.jpg
+https://pwlucglqqmjugvzzuiep.supabase.co/storage/v1/object/public/food-items/ilish%20fish%20fry.jpg
+https://pwlucglqqmjugvzzuiep.supabase.co/storage/v1/object/public/food-items/korola%20bhaji%20bitter%20gourd%20fry.png
+https://pwlucglqqmjugvzzuiep.supabase.co/storage/v1/object/public/food-items/lal%20shak%20bhaji.png
+https://pwlucglqqmjugvzzuiep.supabase.co/storage/v1/object/public/food-items/masoor%20dal%20soup.jpg
+https://pwlucglqqmjugvzzuiep.supabase.co/storage/v1/object/public/food-items/mixed%20vegetable%20curry.jpg
+https://pwlucglqqmjugvzzuiep.supabase.co/storage/v1/object/public/food-items/moong%20dal%20curry.jpg
+https://pwlucglqqmjugvzzuiep.supabase.co/storage/v1/object/public/food-items/pabda%20fish%20curry.jpg
+https://pwlucglqqmjugvzzuiep.supabase.co/storage/v1/object/public/food-items/pangas%20fish%20curry.jpg
+https://pwlucglqqmjugvzzuiep.supabase.co/storage/v1/object/public/food-items/paratha%20fried.png
+https://pwlucglqqmjugvzzuiep.supabase.co/storage/v1/object/public/food-items/plain%20white%20rice%20plate.jpg
+https://pwlucglqqmjugvzzuiep.supabase.co/storage/v1/object/public/food-items/roti%20chapati%20bread.png
+https://pwlucglqqmjugvzzuiep.supabase.co/storage/v1/object/public/food-items/rui%20fish%20curry%20bangladesh.jpg
+https://pwlucglqqmjugvzzuiep.supabase.co/storage/v1/object/public/food-items/shutki%20bhorta.png
+https://pwlucglqqmjugvzzuiep.supabase.co/storage/v1/object/public/food-items/simple%20omelette%20egg.jpg
+https://pwlucglqqmjugvzzuiep.supabase.co/storage/v1/object/public/food-items/tilapia%20fry%20crispy.jpg
+
+
+
+Postman API testing::
+
+https://pwlucglqqmjugvzzuiep.supabase.co/rest/v1/food_items?select=*
+
+KEY	VALUE
+apikey	sb_publishable_U5T-VIhGN1dh3w3obRxN-Q_SXF1iQN9
+Authorization	Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB3bHVjZ2xxcW1qdWd2enp1aWVwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEwMTA2OTgsImV4cCI6MjA5NjU4NjY5OH0.DhvRVyaJc2gGZ_PyBePJfLva5CX0XAjM-TKDwSbj1Ic
+
+

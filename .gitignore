@@ -53,7 +53,5 @@ Thumbs.db
 # Optional (your custom rules)
 # =========================
 # src er moddhe sob folder ignore (if needed)
-src/*/
 
 # supabase ignore korte chaile:
-supabase/

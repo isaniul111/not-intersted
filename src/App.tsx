@@ -8,6 +8,7 @@ import AdminLogin from './pages/admin/AdminLogin';
 import AdminDashboard from './pages/admin/AdminDashboard';
 import MembersManagement from './pages/admin/MembersManagement';
 import MealsManagement from './pages/admin/MealsManagement';
+import PaymentsManagement from './pages/admin/PaymentsManagement';
 import NoticesManagement from './pages/admin/NoticesManagement';
 import ExpensesManagement from './pages/admin/ExpensesManagement';
 import AdminSettings from './pages/admin/AdminSettings';
@@ -16,7 +17,10 @@ import MemberLogin from './pages/MemberLogin';
 import MemberDashboard from './pages/member/MemberDashboard';
 import MemberProfile from './pages/member/MemberProfile';
 import MemberMeals from './pages/member/MemberMeals';
+import MemberMealPreferences from './pages/member/MemberMealPreferences';
+import MemberPayments from './pages/member/MemberPayments';
 import MemberNotices from './pages/member/MemberNotices';
+
 
 // RootRedirect Component
 const RootRedirect = () => {
@@ -38,15 +42,27 @@ const RootRedirect = () => {
 
   // Jodi user thake ebong pathname root ('/') hoy
   if (location.pathname === '/') {
-      const lastPage = localStorage.getItem('lastVisitedPage');
-      if (lastPage && lastPage !== '/' && lastPage !== '/login' && lastPage !== '/admin/login') {
-          return <Navigate to={lastPage} replace />;
-      }
-      // Kon last page na thakle role onujayi default dashboard
-      return <Navigate to={role === 'admin' ? '/admin/dashboard' : '/dashboard'} replace />;
+    const lastPage = localStorage.getItem('lastVisitedPage');
+
+    if (
+      lastPage &&
+      lastPage !== '/' &&
+      lastPage !== '/login' &&
+      lastPage !== '/admin/login'
+    ) {
+      return <Navigate to={lastPage} replace />;
+    }
+
+    // Kon last page na thakle role onujayi default dashboard
+    return (
+      <Navigate
+        to={role === 'admin' ? '/admin/dashboard' : '/dashboard'}
+        replace
+      />
+    );
   }
 
-  return null; // Eta normally execute hobe na, cause root '/' chara ekhane asbe na
+  return null;
 };
 
 function AppRoutes() {
@@ -60,7 +76,8 @@ function AppRoutes() {
       <Route path="/admin/login" element={<AdminLogin />} />
       <Route path="/login" element={<MemberLogin />} />
 
-      {/* Admin Protected Routes */}
+      {/* ==================== ADMIN PROTECTED ROUTES ==================== */}
+
       <Route
         path="/admin/dashboard"
         element={
@@ -69,6 +86,7 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
+
       <Route
         path="/admin/members"
         element={
@@ -77,6 +95,7 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
+
       <Route
         path="/admin/meals"
         element={
@@ -85,6 +104,17 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
+
+      {/* NEW: Admin Payments */}
+      <Route
+        path="/admin/payments"
+        element={
+          <ProtectedRoute requiredRole="admin">
+            <PaymentsManagement />
+          </ProtectedRoute>
+        }
+      />
+
       <Route
         path="/admin/notices"
         element={
@@ -93,6 +123,7 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
+
       <Route
         path="/admin/expenses"
         element={
@@ -101,6 +132,7 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
+
       <Route
         path="/admin/settings"
         element={
@@ -110,7 +142,9 @@ function AppRoutes() {
         }
       />
 
-      {/* Member Protected Routes */}
+
+      {/* ==================== MEMBER PROTECTED ROUTES ==================== */}
+
       <Route
         path="/dashboard"
         element={
@@ -119,6 +153,7 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
+
       <Route
         path="/profile"
         element={
@@ -127,6 +162,7 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
+
       <Route
         path="/meals"
         element={
@@ -135,6 +171,27 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
+
+      {/* NEW: Member Meal Preferences */}
+      <Route
+        path="/meal-preferences"
+        element={
+          <ProtectedRoute requiredRole="member">
+            <MemberMealPreferences />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* NEW: Member Payments */}
+      <Route
+        path="/payments"
+        element={
+          <ProtectedRoute requiredRole="member">
+            <MemberPayments />
+          </ProtectedRoute>
+        }
+      />
+
       <Route
         path="/notices"
         element={
@@ -143,7 +200,7 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
-      
+
       {/* Fallback Route */}
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
