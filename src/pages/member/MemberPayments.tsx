@@ -1,174 +1,232 @@
-import { useEffect, useMemo, useState } from 'react';
-import { motion } from 'framer-motion';
+import { useEffect, useState } from 'react';
 import {
   AlertCircle,
   CheckCircle2,
-  Clock3,
   CreditCard,
-  ExternalLink,
   Loader2,
   RefreshCw,
-  WalletCards,
-  XCircle,
 } from 'lucide-react';
+
 import MemberLayout from '../../components/member/MemberLayout';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/AuthContext';
 
-type Due = {
-  id: string;
-  billing_month: string;
-  meal_charge: number;
-  other_charge: number;
-  previous_due: number;
-  total_due: number;
-  paid_amount: number;
-  remaining_due: number;
-  status: 'due' | 'partial' | 'paid';
-};
-
-type Payment = {
-  id: string;
-  amount: number;
-  currency: string;
-  payment_method: string;
-  provider: string;
-  transaction_id: string;
-  gateway_transaction_id: string | null;
-  status: 'pending' | 'paid' | 'failed' | 'cancelled';
-  paid_at: string | null;
-  created_at: string;
-};
-
-const monthStart = (date = new Date()) =>
-  `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-01`;
-
-const money = (value: number) =>
+const money = (v: number) =>
   new Intl.NumberFormat('en-BD', {
     style: 'currency',
     currency: 'BDT',
     maximumFractionDigits: 2,
-  }).format(Number(value || 0));
+  }).format(Number(v || 0));
 
-const monthLabel = (value: string) =>
-  new Intl.DateTimeFormat('en-US', { month: 'long', year: 'numeric' }).format(
-    new Date(`${value}T00:00:00`)
-  );
+const month = () => {
+  const d = new Date();
+
+  return `${d.getFullYear()}-${String(
+    d.getMonth() + 1
+  ).padStart(2, '0')}-01`;
+};
+
+type Message = {
+  type: 'success' | 'error' | 'info';
+  text: string;
+};
 
 export default function MemberPayments() {
   const { profile } = useAuth();
-  const [due, setDue] = useState<Due | null>(null);
-  const [payments, setPayments] = useState<Payment[]>([]);
-  const [amount, setAmount] = useState('');
-  const [loading, setLoading] = useState(true);
-  const [paying, setPaying] = useState(false);
-  const [message, setMessage] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
-  const [isDark, setIsDark] = useState(() => localStorage.getItem('memberTheme') !== 'light');
 
-  const currentMonth = useMemo(() => monthStart(), []);
+  const [due, setDue] = useState<any>(null);
+  const [payments, setPayments] = useState<any[]>([]);
+
+  const [amount, setAmount] = useState('');
+  const [method, setMethod] = useState('bkash');
+
+  const [paying, setPaying] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  const [message, setMessage] =
+    useState<Message | null>(null);
+
+  const [isDark, setIsDark] = useState(
+    () =>
+      localStorage.getItem('memberTheme') !==
+      'light'
+  );
+
+  const currentMonth = month();
+
+  // ----------------------------------------------------------
+  // Theme listener
+  // ----------------------------------------------------------
 
   useEffect(() => {
-    const checkTheme = () => setIsDark(localStorage.getItem('memberTheme') !== 'light');
-    const interval = window.setInterval(checkTheme, 100);
-    return () => window.clearInterval(interval);
+    const id = setInterval(() => {
+      setIsDark(
+        localStorage.getItem('memberTheme') !==
+          'light'
+      );
+    }, 100);
+
+    return () => clearInterval(id);
   }, []);
+
+  // ----------------------------------------------------------
+  // Load payment information
+  // ----------------------------------------------------------
 
   useEffect(() => {
     if (profile) {
-      handlePaymentResult();
-      loadPayments();
+      load();
     }
   }, [profile]);
 
-  const handlePaymentResult = () => {
-    const params = new URLSearchParams(window.location.search);
-    const result = params.get('payment');
-
-    if (result === 'success') {
-      setMessage({
-        type: 'success',
-        text: `Payment submitted successfully${params.get('tran_id') ? ` · ${params.get('tran_id')}` : ''}.`,
-      });
-    } else if (result === 'failed') {
-      setMessage({ type: 'error', text: 'Payment failed. No amount was added to your paid balance.' });
-    } else if (result === 'cancelled') {
-      setMessage({ type: 'info', text: 'Payment was cancelled.' });
-    }
-
-    if (result) {
-      window.history.replaceState({}, document.title, '/payments');
-    }
-  };
-
-  const loadPayments = async () => {
+  async function load() {
     try {
       setLoading(true);
+      setMessage(null);
+
       const memberId = (profile as any)?.id;
 
-      // Generate/refresh this month's due from meal preferences.
-      const { error: dueError } = await supabase.rpc('generate_member_due', {
-        p_member_id: memberId,
-        p_billing_month: currentMonth,
-        p_other_charge: null,
-      });
-
-      if (dueError) throw dueError;
-
-      const { data: dueData, error: dueSelectError } = await supabase
-        .from('member_payment_summary')
-        .select('*')
-        .eq('member_id', memberId)
-        .eq('billing_month', currentMonth)
-        .maybeSingle();
-
-      if (dueSelectError) throw dueSelectError;
-
-      const { data: paymentData, error: paymentError } = await supabase
-        .from('payment_transactions')
-        .select(
-          'id,amount,currency,payment_method,provider,transaction_id,gateway_transaction_id,status,paid_at,created_at'
-        )
-        .eq('member_id', memberId)
-        .order('created_at', { ascending: false });
-
-      if (paymentError) throw paymentError;
-
-      setDue(dueData || null);
-      setPayments(paymentData || []);
-
-      if (dueData && dueData.remaining_due > 0) {
-        setAmount(Number(dueData.remaining_due).toFixed(2));
-      } else {
-        setAmount('0');
+      if (!memberId) {
+        throw new Error(
+          'Member profile not found.'
+        );
       }
-    } catch (error: any) {
-      console.error(error);
-      setMessage({ type: 'error', text: error.message || 'Could not load payment information.' });
+
+      // Generate/update current month's due
+      const {
+        error: generateError,
+      } = await supabase.rpc(
+        'generate_member_due',
+        {
+          p_member_id: memberId,
+          p_billing_month:
+            currentMonth,
+          p_other_charge: null,
+        }
+      );
+
+      if (generateError) {
+        throw generateError;
+      }
+
+      // Load due + payment history
+      const [
+        {
+          data: dueData,
+          error: dueError,
+        },
+        {
+          data: paymentData,
+          error: paymentError,
+        },
+      ] = await Promise.all([
+        supabase
+          .from('member_payment_summary')
+          .select('*')
+          .eq(
+            'member_id',
+            memberId
+          )
+          .eq(
+            'billing_month',
+            currentMonth
+          )
+          .maybeSingle(),
+
+        supabase
+          .from('payment_transactions')
+          .select(
+            `
+            id,
+            amount,
+            payment_method,
+            provider,
+            transaction_id,
+            status,
+            paid_at,
+            created_at,
+            notes
+            `
+          )
+          .eq(
+            'member_id',
+            memberId
+          )
+          .order(
+            'created_at',
+            {
+              ascending: false,
+            }
+          ),
+      ]);
+
+      if (dueError) {
+        throw dueError;
+      }
+
+      if (paymentError) {
+        throw paymentError;
+      }
+
+      setDue(dueData);
+      setPayments(
+        paymentData || []
+      );
+
+      // Default amount
+      if (dueData) {
+        const balance = Number(
+          dueData.balance || 0
+        );
+
+        if (balance > 0) {
+          setAmount(
+            balance.toFixed(2)
+          );
+        } else {
+          setAmount('');
+        }
+      }
+    } catch (e: any) {
+      setMessage({
+        type: 'error',
+        text:
+          e?.message ||
+          'Could not load payment information.',
+      });
     } finally {
       setLoading(false);
     }
-  };
+  }
 
-  const startPayment = async () => {
-    const numericAmount = Number(amount);
+  // ----------------------------------------------------------
+  // Submit manual payment
+  // ----------------------------------------------------------
 
-    if (!due || due.remaining_due <= 0) {
-      setMessage({ type: 'info', text: 'You do not have any outstanding balance.' });
+  async function submitPayment() {
+    const n = Number(amount);
+
+    // Minimum payment
+    if (
+      !Number.isFinite(n) ||
+      n < 10
+    ) {
+      setMessage({
+        type: 'error',
+        text:
+          'Minimum payment is BDT 10.',
+      });
+
       return;
     }
 
-    if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
-      setMessage({ type: 'error', text: 'Enter a valid payment amount.' });
-      return;
-    }
+    if (!profile) {
+      setMessage({
+        type: 'error',
+        text:
+          'Member profile not found.',
+      });
 
-    if (numericAmount < 10) {
-      setMessage({ type: 'error', text: 'SSLCOMMERZ requires at least BDT 10.00 per transaction.' });
-      return;
-    }
-
-    if (numericAmount > Number(due.remaining_due)) {
-      setMessage({ type: 'error', text: `You cannot pay more than ${money(due.remaining_due)}.` });
       return;
     }
 
@@ -176,37 +234,97 @@ export default function MemberPayments() {
       setPaying(true);
       setMessage(null);
 
-      const { data, error } = await supabase.functions.invoke('create-payment', {
-        body: {
+      const memberId =
+        (profile as any).id;
+
+      const hostelId =
+        (profile as any).hostel_id;
+
+      if (!memberId || !hostelId) {
+        throw new Error(
+          'Member account information is incomplete.'
+        );
+      }
+
+      if (!due?.id) {
+        throw new Error(
+          'Current due record was not found.'
+        );
+      }
+
+      // ------------------------------------------------------
+      // IMPORTANT:
+      //
+      // We intentionally DO NOT compare payment amount
+      // with current due.
+      //
+      // Example:
+      //
+      // Current due = ৳1,000
+      // Payment     = ৳1,500
+      //
+      // Allowed.
+      // After admin verification:
+      // Advance = ৳500
+      // ------------------------------------------------------
+
+      const transactionId =
+        `MAN-${Date.now()}-${Math.random()
+          .toString(36)
+          .slice(2, 8)
+          .toUpperCase()}`;
+
+      const {
+        error,
+      } = await supabase
+        .from(
+          'payment_transactions'
+        )
+        .insert({
+          member_id: memberId,
+          hostel_id: hostelId,
           due_id: due.id,
-          amount: Number(numericAmount.toFixed(2)),
-        },
+          amount: Number(
+            n.toFixed(2)
+          ),
+          currency: 'BDT',
+          payment_method: method,
+          provider: method,
+          transaction_id:
+            transactionId,
+          status: 'pending',
+          notes:
+            'Manual payment submitted by member',
+        });
+
+      if (error) {
+        throw error;
+      }
+
+      setMessage({
+        type: 'success',
+        text:
+          'Payment request submitted successfully. Admin will verify it and your balance will update.',
       });
 
-      if (error) throw error;
-      if (!data?.gateway_url) throw new Error(data?.message || 'Payment gateway URL was not returned.');
+      setAmount('');
 
-      window.location.href = data.gateway_url;
-    } catch (error: any) {
-      console.error(error);
-      setMessage({ type: 'error', text: error.message || 'Could not start payment.' });
+      await load();
+    } catch (e: any) {
+      setMessage({
+        type: 'error',
+        text:
+          e?.message ||
+          'Could not submit payment request.',
+      });
+    } finally {
       setPaying(false);
     }
-  };
+  }
 
-  const statusIcon = (status: Payment['status']) => {
-    if (status === 'paid') return <CheckCircle2 size={18} className="text-emerald-500" />;
-    if (status === 'failed') return <XCircle size={18} className="text-rose-500" />;
-    if (status === 'cancelled') return <XCircle size={18} className="text-slate-500" />;
-    return <Clock3 size={18} className="text-amber-500" />;
-  };
-
-  const statusClass = (status: Payment['status']) => {
-    if (status === 'paid') return 'text-emerald-500';
-    if (status === 'failed') return 'text-rose-500';
-    if (status === 'cancelled') return 'text-slate-500';
-    return 'text-amber-500';
-  };
+  // ----------------------------------------------------------
+  // Loading
+  // ----------------------------------------------------------
 
   if (loading) {
     return (
@@ -218,193 +336,555 @@ export default function MemberPayments() {
     );
   }
 
+  // ----------------------------------------------------------
+  // Current balance
+  // ----------------------------------------------------------
+
+  const balance = Number(
+    due?.balance || 0
+  );
+
+  const totalDue = Number(
+    due?.total_due || 0
+  );
+
+  const paidAmount = Number(
+    due?.paid_amount || 0
+  );
+
+  const advanceAmount = Number(
+    due?.advance_amount || 0
+  );
+
   return (
     <MemberLayout>
       <div className="w-full max-w-6xl mx-auto">
-        <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 mb-8">
+
+        {/* ==================================================
+            HEADER
+        ================================================== */}
+
+        <div className="flex items-end justify-between gap-4 mb-8">
+
           <div>
-            <p className={`text-xs font-bold uppercase tracking-widest ${isDark ? 'text-indigo-400' : 'text-indigo-600'}`}>
+            <p className="text-xs font-bold uppercase tracking-widest text-indigo-500">
               Finance
             </p>
-            <h1 className={`text-3xl sm:text-4xl font-extrabold mt-1 ${isDark ? 'text-white' : 'text-slate-900'}`}>
+
+            <h1
+              className={`text-3xl sm:text-4xl font-extrabold mt-1 ${
+                isDark
+                  ? 'text-white'
+                  : 'text-slate-900'
+              }`}
+            >
               My Payments
             </h1>
-            <p className={`text-sm mt-2 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-              View your individual mess balance and complete online payments.
+
+            <p className="text-sm mt-2 text-slate-500">
+              Submit any payment amount.
+              Extra verified payment stays
+              as advance credit.
             </p>
           </div>
 
           <button
-            onClick={loadPayments}
-            className={`inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border text-sm font-semibold ${
+            onClick={load}
+            className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border ${
               isDark
-                ? 'border-white/10 bg-white/5 text-slate-300 hover:bg-white/10'
-                : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                ? 'border-white/10 bg-white/5 text-slate-300'
+                : 'border-slate-200 bg-white text-slate-700'
             }`}
           >
             <RefreshCw size={16} />
             Refresh
           </button>
+
         </div>
+
+
+        {/* ==================================================
+            MESSAGE
+        ================================================== */}
 
         {message && (
           <div
-            className={`mb-6 flex items-start gap-3 rounded-2xl border p-4 text-sm ${
-              message.type === 'success'
+            className={`mb-5 rounded-2xl border p-4 text-sm flex gap-2 ${
+              message.type ===
+              'success'
                 ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-500'
-                : message.type === 'error'
-                  ? 'bg-rose-500/10 border-rose-500/20 text-rose-500'
-                  : 'bg-amber-500/10 border-amber-500/20 text-amber-500'
+                : message.type ===
+                  'error'
+                ? 'bg-rose-500/10 border-rose-500/20 text-rose-500'
+                : 'bg-indigo-500/10 border-indigo-500/20 text-indigo-500'
             }`}
           >
-            {message.type === 'success' ? <CheckCircle2 size={18} /> : <AlertCircle size={18} />}
-            <span>{message.text}</span>
+            {message.type ===
+            'success' ? (
+              <CheckCircle2
+                size={18}
+              />
+            ) : (
+              <AlertCircle
+                size={18}
+              />
+            )}
+
+            <span>
+              {message.text}
+            </span>
           </div>
         )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 mb-8">
-          <div className={`lg:col-span-2 rounded-3xl border p-6 sm:p-8 ${
-            isDark ? 'bg-slate-800/50 border-white/5' : 'bg-white border-slate-200 shadow-sm'
-          }`}>
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <p className={`text-sm font-semibold ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                  Outstanding Balance
-                </p>
-                <p className={`text-4xl sm:text-5xl font-black mt-2 ${due?.remaining_due ? 'text-rose-500' : 'text-emerald-500'}`}>
-                  {money(due?.remaining_due || 0)}
-                </p>
-              </div>
-              <div className={`p-3 rounded-2xl ${isDark ? 'bg-indigo-500/10 text-indigo-400' : 'bg-indigo-50 text-indigo-600'}`}>
-                <WalletCards size={26} />
-              </div>
-            </div>
 
-            <div className="mt-7 grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <Stat label="Meal" value={money(due?.meal_charge || 0)} dark={isDark} />
-              <Stat label="Other" value={money(due?.other_charge || 0)} dark={isDark} />
-              <Stat label="Previous" value={money(due?.previous_due || 0)} dark={isDark} />
-              <Stat label="Paid" value={money(due?.paid_amount || 0)} dark={isDark} />
-            </div>
-          </div>
+        {/* ==================================================
+            BALANCE + PAYMENT
+        ================================================== */}
 
-          <div className={`rounded-3xl border p-6 ${
-            isDark ? 'bg-slate-800/50 border-white/5' : 'bg-white border-slate-200 shadow-sm'
-          }`}>
-            <p className={`text-sm font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>
-              {monthLabel(currentMonth)}
-            </p>
-            <p className={`text-xs mt-1 ${isDark ? 'text-slate-500' : 'text-slate-500'}`}>
-              Current billing cycle
+        <div className="grid lg:grid-cols-3 gap-5">
+
+          {/* ================================================
+              CURRENT BALANCE
+          ================================================ */}
+
+          <div
+            className={`lg:col-span-2 rounded-3xl border p-6 sm:p-8 ${
+              isDark
+                ? 'bg-slate-800/50 border-white/5'
+                : 'bg-white border-slate-200 shadow-sm'
+            }`}
+          >
+
+            <p className="text-sm font-semibold text-slate-500">
+              Current Account Balance
             </p>
 
-            <div className="mt-6">
-              <label className={`text-xs font-bold uppercase tracking-widest ${isDark ? 'text-slate-500' : 'text-slate-500'}`}>
-                Payment amount
-              </label>
-              <div className="relative mt-2">
-                <span className={`absolute left-4 top-1/2 -translate-y-1/2 font-bold ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
-                  ৳
-                </span>
-                <input
-                  type="number"
-                  min="10"
-                  step="0.01"
-                  value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
-                  disabled={!due || due.remaining_due <= 0 || paying}
-                  className={`w-full pl-9 pr-4 py-3.5 rounded-xl border outline-none focus:ring-2 focus:ring-indigo-500 ${
-                    isDark
-                      ? 'bg-slate-900/60 border-white/10 text-white'
-                      : 'bg-slate-50 border-slate-200 text-slate-900'
-                  }`}
-                />
-              </div>
+            <p
+              className={`text-4xl sm:text-5xl font-black mt-2 ${
+                balance > 0
+                  ? 'text-rose-500'
+                  : balance < 0
+                  ? 'text-emerald-500'
+                  : 'text-emerald-500'
+              }`}
+            >
+              {balance > 0
+                ? `Due ${money(
+                    balance
+                  )}`
+                : balance < 0
+                ? `Advance ${money(
+                    Math.abs(
+                      balance
+                    )
+                  )}`
+                : 'Settled'}
+            </p>
 
-              <button
-                onClick={startPayment}
-                disabled={!due || due.remaining_due <= 0 || paying}
-                className="w-full mt-3 flex items-center justify-center gap-2 px-4 py-3.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold transition"
-              >
-                {paying ? <Loader2 size={18} className="animate-spin" /> : <CreditCard size={18} />}
-                {paying ? 'Redirecting...' : due?.remaining_due ? 'Pay with SSLCOMMERZ' : 'Fully Paid'}
-              </button>
 
-              <p className={`text-[11px] mt-3 leading-5 ${isDark ? 'text-slate-500' : 'text-slate-500'}`}>
-                You will be redirected to the hosted payment page. Your card/mobile-wallet credentials are handled by the gateway.
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-7">
+
+              <Stat
+                label="Meal"
+                value={money(
+                  due?.meal_charge
+                )}
+                dark={isDark}
+              />
+
+              <Stat
+                label="Other"
+                value={money(
+                  due?.other_charge
+                )}
+                dark={isDark}
+              />
+
+              <Stat
+                label="Total Due"
+                value={money(
+                  totalDue
+                )}
+                dark={isDark}
+              />
+
+              <Stat
+                label="Paid"
+                value={money(
+                  paidAmount
+                )}
+                dark={isDark}
+              />
+
+            </div>
+
+
+            {/* Advance */}
+
+            <div
+              className={`mt-4 rounded-2xl p-4 ${
+                isDark
+                  ? 'bg-emerald-500/5'
+                  : 'bg-emerald-50'
+              }`}
+            >
+              <p className="text-xs uppercase tracking-widest font-bold text-slate-500">
+                Advance Credit
+              </p>
+
+              <p className="text-xl font-black text-emerald-500 mt-1">
+                {money(
+                  advanceAmount
+                )}
+              </p>
+
+              <p className="text-xs text-slate-500 mt-1">
+                Extra verified payment is
+                automatically kept as
+                advance credit.
               </p>
             </div>
+
           </div>
+
+
+          {/* ================================================
+              MAKE PAYMENT
+          ================================================ */}
+
+          <div
+            className={`rounded-3xl border p-6 ${
+              isDark
+                ? 'bg-slate-800/50 border-white/5'
+                : 'bg-white border-slate-200'
+            }`}
+          >
+
+            <h2
+              className={`font-bold ${
+                isDark
+                  ? 'text-white'
+                  : 'text-slate-900'
+              }`}
+            >
+              Make a Payment
+            </h2>
+
+
+            {/* Amount */}
+
+            <label className="block text-xs font-bold uppercase tracking-widest text-slate-500 mt-5">
+              Amount
+            </label>
+
+            <input
+              type="number"
+              min="10"
+              step="0.01"
+              value={amount}
+              onChange={(e) =>
+                setAmount(
+                  e.target.value
+                )
+              }
+              placeholder="Enter amount"
+              className={`w-full mt-2 px-4 py-3 rounded-xl border ${
+                isDark
+                  ? 'bg-slate-900/60 border-white/10 text-white placeholder:text-slate-600'
+                  : 'bg-slate-50 border-slate-200 text-slate-900'
+              }`}
+            />
+
+
+            {/* Payment method */}
+
+            <label className="block text-xs font-bold uppercase tracking-widest text-slate-500 mt-4">
+              Payment Method
+            </label>
+
+            <select
+              value={method}
+              onChange={(e) =>
+                setMethod(
+                  e.target.value
+                )
+              }
+              className={`w-full mt-2 px-4 py-3 rounded-xl border ${
+                isDark
+                  ? 'bg-slate-900/60 border-white/10 text-white'
+                  : 'bg-slate-50 border-slate-200 text-slate-900'
+              }`}
+            >
+
+              <option value="bkash">
+                bKash
+              </option>
+
+              <option value="nagad">
+                Nagad
+              </option>
+
+              <option value="bank_transfer">
+                Bank Transfer
+              </option>
+
+              <option value="cash">
+                Cash
+              </option>
+
+            </select>
+
+
+            {/* Submit */}
+
+            <button
+              onClick={
+                submitPayment
+              }
+              disabled={paying}
+              className="w-full mt-4 flex items-center justify-center gap-2 px-4 py-3.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold disabled:opacity-60"
+            >
+
+              {paying ? (
+                <Loader2
+                  size={18}
+                  className="animate-spin"
+                />
+              ) : (
+                <CreditCard
+                  size={18}
+                />
+              )}
+
+              Submit Payment Request
+
+            </button>
+
+
+            <p className="text-[11px] text-slate-500 mt-3">
+              Minimum payment is BDT 10.
+              You can pay less or more than
+              your current due. Extra verified
+              payment becomes advance credit.
+            </p>
+
+          </div>
+
         </div>
 
-        <div className={`rounded-3xl border overflow-hidden ${
-          isDark ? 'bg-slate-800/50 border-white/5' : 'bg-white border-slate-200 shadow-sm'
-        }`}>
-          <div className={`p-5 sm:p-6 border-b ${isDark ? 'border-white/5' : 'border-slate-200'}`}>
-            <h2 className={`font-bold text-lg ${isDark ? 'text-white' : 'text-slate-900'}`}>
+
+        {/* ==================================================
+            PAYMENT HISTORY
+        ================================================== */}
+
+        <div
+          className={`mt-6 rounded-3xl border overflow-hidden ${
+            isDark
+              ? 'bg-slate-800/50 border-white/5'
+              : 'bg-white border-slate-200 shadow-sm'
+          }`}
+        >
+
+          <div className="p-5 border-b border-slate-200/10">
+
+            <h2
+              className={`font-bold ${
+                isDark
+                  ? 'text-white'
+                  : 'text-slate-900'
+              }`}
+            >
               Payment History
             </h2>
+
           </div>
 
+
           {payments.length === 0 ? (
-            <div className={`p-12 text-center text-sm ${isDark ? 'text-slate-500' : 'text-slate-500'}`}>
+
+            <div className="p-10 text-center text-sm text-slate-500">
               No payment transactions yet.
             </div>
+
           ) : (
+
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[720px] text-left">
+
+              <table className="w-full min-w-[820px] text-left">
+
                 <thead>
-                  <tr className={isDark ? 'bg-slate-900/50' : 'bg-slate-50'}>
-                    <th className="px-6 py-4 text-xs uppercase tracking-widest text-slate-500">Date</th>
-                    <th className="px-6 py-4 text-xs uppercase tracking-widest text-slate-500">Amount</th>
-                    <th className="px-6 py-4 text-xs uppercase tracking-widest text-slate-500">Method</th>
-                    <th className="px-6 py-4 text-xs uppercase tracking-widest text-slate-500">Transaction</th>
-                    <th className="px-6 py-4 text-xs uppercase tracking-widest text-slate-500">Status</th>
+
+                  <tr
+                    className={
+                      isDark
+                        ? 'bg-slate-900/50'
+                        : 'bg-slate-50'
+                    }
+                  >
+
+                    <th className="px-5 py-3 text-xs uppercase tracking-widest text-slate-500">
+                      Date
+                    </th>
+
+                    <th className="px-5 py-3 text-xs uppercase tracking-widest text-slate-500">
+                      Amount
+                    </th>
+
+                    <th className="px-5 py-3 text-xs uppercase tracking-widest text-slate-500">
+                      Method
+                    </th>
+
+                    <th className="px-5 py-3 text-xs uppercase tracking-widest text-slate-500">
+                      Transaction
+                    </th>
+
+                    <th className="px-5 py-3 text-xs uppercase tracking-widest text-slate-500">
+                      Status
+                    </th>
+
                   </tr>
+
                 </thead>
-                <tbody className={`divide-y ${isDark ? 'divide-white/5' : 'divide-slate-100'}`}>
-                  {payments.map((payment) => (
-                    <tr key={payment.id}>
-                      <td className={`px-6 py-4 text-sm ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
-                        {new Date(payment.created_at).toLocaleString('en-BD')}
-                      </td>
-                      <td className={`px-6 py-4 text-sm font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>
-                        {money(payment.amount)}
-                      </td>
-                      <td className={`px-6 py-4 text-sm ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
-                        {payment.payment_method || 'Online'}
-                      </td>
-                      <td className={`px-6 py-4 text-xs font-mono ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                        {payment.transaction_id}
-                      </td>
-                      <td className="px-6 py-4">
-                        <span className={`inline-flex items-center gap-2 text-sm font-bold uppercase ${statusClass(payment.status)}`}>
-                          {statusIcon(payment.status)}
-                          {payment.status}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
+
+
+                <tbody className="divide-y divide-slate-200/10">
+
+                  {payments.map(
+                    (p) => (
+                      <tr
+                        key={p.id}
+                      >
+
+                        <td className="px-5 py-3 text-sm text-slate-400">
+                          {new Date(
+                            p.created_at
+                          ).toLocaleString(
+                            'en-BD'
+                          )}
+                        </td>
+
+                        <td
+                          className={`px-5 py-3 text-sm font-bold ${
+                            isDark
+                              ? 'text-slate-200'
+                              : 'text-slate-800'
+                          }`}
+                        >
+                          {money(
+                            p.amount
+                          )}
+                        </td>
+
+                        <td className="px-5 py-3 text-sm text-slate-400">
+                          {formatMethod(
+                            p.payment_method
+                          )}
+                        </td>
+
+                        <td className="px-5 py-3 text-xs text-slate-500 font-mono">
+                          {p.transaction_id ||
+                            '-'}
+                        </td>
+
+                        <td
+                          className={`px-5 py-3 text-sm font-bold uppercase ${
+                            p.status ===
+                            'paid'
+                              ? 'text-emerald-500'
+                              : p.status ===
+                                'failed'
+                              ? 'text-rose-500'
+                              : p.status ===
+                                'cancelled'
+                              ? 'text-slate-500'
+                              : 'text-amber-500'
+                          }`}
+                        >
+                          {p.status}
+                        </td>
+
+                      </tr>
+                    )
+                  )}
+
                 </tbody>
+
               </table>
+
             </div>
+
           )}
+
         </div>
 
-        <div className={`mt-5 flex items-center gap-2 text-xs ${isDark ? 'text-slate-500' : 'text-slate-500'}`}>
-          <ExternalLink size={14} />
-          Online payments are verified server-side before your balance is updated.
-        </div>
       </div>
     </MemberLayout>
   );
 }
 
-function Stat({ label, value, dark }: { label: string; value: string; dark: boolean }) {
+
+// ==========================================================
+// STAT COMPONENT
+// ==========================================================
+
+function Stat({
+  label,
+  value,
+  dark,
+}: {
+  label: string;
+  value: string;
+  dark: boolean;
+}) {
   return (
-    <div className={`rounded-2xl p-3 ${dark ? 'bg-white/[0.03]' : 'bg-slate-50'}`}>
-      <p className={`text-[10px] uppercase tracking-widest font-bold ${dark ? 'text-slate-600' : 'text-slate-400'}`}>{label}</p>
-      <p className={`text-sm font-bold mt-1 ${dark ? 'text-slate-200' : 'text-slate-800'}`}>{value}</p>
+    <div
+      className={`rounded-2xl p-3 ${
+        dark
+          ? 'bg-white/[0.03]'
+          : 'bg-slate-50'
+      }`}
+    >
+
+      <p className="text-[10px] uppercase tracking-widest font-bold text-slate-500">
+        {label}
+      </p>
+
+      <p
+        className={`text-sm font-bold mt-1 ${
+          dark
+            ? 'text-slate-200'
+            : 'text-slate-800'
+        }`}
+      >
+        {value}
+      </p>
+
     </div>
   );
+}
+
+
+// ==========================================================
+// PAYMENT METHOD FORMAT
+// ==========================================================
+
+function formatMethod(
+  method: string
+) {
+  switch (method) {
+    case 'bkash':
+      return 'bKash';
+
+    case 'nagad':
+      return 'Nagad';
+
+    case 'bank_transfer':
+      return 'Bank Transfer';
+
+    case 'cash':
+      return 'Cash';
+
+    default:
+      return method || '-';
+  }
 }

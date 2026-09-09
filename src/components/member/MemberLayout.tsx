@@ -13,7 +13,7 @@ import {
   X,
   Sun,
   Moon,
-  SlidersHorizontal,
+  ClipboardCheck,
   CreditCard,
 } from 'lucide-react';
 
@@ -29,7 +29,9 @@ export default function MemberLayout({ children }: MemberLayoutProps) {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const [theme, setTheme] = useState<'dark' | 'light'>(() => {
-    return (localStorage.getItem('memberTheme') as 'dark' | 'light') || 'dark';
+    return (
+      (localStorage.getItem('memberTheme') as 'dark' | 'light') || 'dark'
+    );
   });
 
   const isDark = theme === 'dark';
@@ -48,25 +50,39 @@ export default function MemberLayout({ children }: MemberLayoutProps) {
 
   // Member Sidebar Menu
   const menuItems = [
-    { icon: LayoutDashboard, label: 'Dashboard', path: '/dashboard' },
-    { icon: UtensilsCrossed, label: 'Meals', path: '/meals' },
-
-    // NEW: Meal Preferences
     {
-      icon: SlidersHorizontal,
-      label: 'Meal Preferences',
+      icon: LayoutDashboard,
+      label: 'Dashboard',
+      path: '/dashboard',
+    },
+    {
+      icon: UtensilsCrossed,
+      label: 'Meals',
+      path: '/meals',
+    },
+
+    {
+      icon: ClipboardCheck,
+      label: 'Meal Preference',
       path: '/meal-preferences',
     },
 
-    // NEW: Payments
     {
       icon: CreditCard,
       label: 'Payments',
       path: '/payments',
     },
 
-    { icon: Bell, label: 'Notices', path: '/notices' },
-    { icon: User, label: 'Profile', path: '/profile' },
+    {
+      icon: Bell,
+      label: 'Notices',
+      path: '/notices',
+    },
+    {
+      icon: User,
+      label: 'Profile',
+      path: '/profile',
+    },
   ];
 
   const handleSignOut = async () => {
@@ -243,7 +259,9 @@ export default function MemberLayout({ children }: MemberLayoutProps) {
         {/* User Profile Mini-Card */}
         <div
           className={`flex items-center gap-3 p-3 mb-3 rounded-2xl ${
-            isDark ? 'bg-white/[0.02]' : 'bg-slate-50/80'
+            isDark
+              ? 'bg-white/[0.02]'
+              : 'bg-slate-50/80'
           }`}
         >
           <div

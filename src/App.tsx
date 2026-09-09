@@ -1,4 +1,11 @@
-import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import {
+  BrowserRouter,
+  Routes,
+  Route,
+  Navigate,
+  useLocation,
+} from 'react-router-dom';
+
 import { AuthProvider, useAuth } from './context/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
 
@@ -9,6 +16,8 @@ import AdminDashboard from './pages/admin/AdminDashboard';
 import MembersManagement from './pages/admin/MembersManagement';
 import MealsManagement from './pages/admin/MealsManagement';
 import PaymentsManagement from './pages/admin/PaymentsManagement';
+import MealPreferencesManagement from './pages/admin/MealPreferencesManagement';
+import ManagerLottery from './pages/admin/ManagerLottery';
 import NoticesManagement from './pages/admin/NoticesManagement';
 import ExpensesManagement from './pages/admin/ExpensesManagement';
 import AdminSettings from './pages/admin/AdminSettings';
@@ -21,8 +30,13 @@ import MemberMealPreferences from './pages/member/MemberMealPreferences';
 import MemberPayments from './pages/member/MemberPayments';
 import MemberNotices from './pages/member/MemberNotices';
 
+import AuthCallback from './pages/AuthCallback';
 
+
+// ========================================================
 // RootRedirect Component
+// ========================================================
+
 const RootRedirect = () => {
   const { user, role, loading } = useAuth();
   const location = useLocation();
@@ -65,19 +79,52 @@ const RootRedirect = () => {
   return null;
 };
 
+
+// ========================================================
+// App Routes
+// ========================================================
+
 function AppRoutes() {
   return (
     <Routes>
-      {/* Root Route */}
+
+      {/* ==================================================
+          ROOT ROUTE
+      ================================================== */}
       <Route path="/" element={<RootRedirect />} />
 
-      {/* Auth Routes */}
-      <Route path="/admin/signup" element={<AdminSignup />} />
-      <Route path="/admin/login" element={<AdminLogin />} />
-      <Route path="/login" element={<MemberLogin />} />
 
-      {/* ==================== ADMIN PROTECTED ROUTES ==================== */}
+      {/* ==================================================
+          AUTH ROUTES
+      ================================================== */}
 
+      <Route
+        path="/admin/signup"
+        element={<AdminSignup />}
+      />
+
+      <Route
+        path="/admin/login"
+        element={<AdminLogin />}
+      />
+
+      <Route
+        path="/login"
+        element={<MemberLogin />}
+      />
+
+      {/* Google OAuth Callback */}
+      <Route
+        path="/auth/callback"
+        element={<AuthCallback />}
+      />
+
+
+      {/* ==================================================
+          ADMIN PROTECTED ROUTES
+      ================================================== */}
+
+      {/* Admin Dashboard */}
       <Route
         path="/admin/dashboard"
         element={
@@ -87,6 +134,7 @@ function AppRoutes() {
         }
       />
 
+      {/* Members */}
       <Route
         path="/admin/members"
         element={
@@ -96,6 +144,7 @@ function AppRoutes() {
         }
       />
 
+      {/* Meals */}
       <Route
         path="/admin/meals"
         element={
@@ -105,7 +154,7 @@ function AppRoutes() {
         }
       />
 
-      {/* NEW: Admin Payments */}
+      {/* Payments */}
       <Route
         path="/admin/payments"
         element={
@@ -115,6 +164,27 @@ function AppRoutes() {
         }
       />
 
+      {/* Meal Preferences */}
+      <Route
+        path="/admin/meal-preferences"
+        element={
+          <ProtectedRoute requiredRole="admin">
+            <MealPreferencesManagement />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Manager Lottery */}
+      <Route
+        path="/admin/manager-lottery"
+        element={
+          <ProtectedRoute requiredRole="admin">
+            <ManagerLottery />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Notices */}
       <Route
         path="/admin/notices"
         element={
@@ -124,6 +194,7 @@ function AppRoutes() {
         }
       />
 
+      {/* Expenses */}
       <Route
         path="/admin/expenses"
         element={
@@ -133,6 +204,7 @@ function AppRoutes() {
         }
       />
 
+      {/* Settings */}
       <Route
         path="/admin/settings"
         element={
@@ -143,8 +215,11 @@ function AppRoutes() {
       />
 
 
-      {/* ==================== MEMBER PROTECTED ROUTES ==================== */}
+      {/* ==================================================
+          MEMBER PROTECTED ROUTES
+      ================================================== */}
 
+      {/* Member Dashboard */}
       <Route
         path="/dashboard"
         element={
@@ -154,6 +229,7 @@ function AppRoutes() {
         }
       />
 
+      {/* Member Profile */}
       <Route
         path="/profile"
         element={
@@ -163,6 +239,7 @@ function AppRoutes() {
         }
       />
 
+      {/* Member Meals */}
       <Route
         path="/meals"
         element={
@@ -172,7 +249,7 @@ function AppRoutes() {
         }
       />
 
-      {/* NEW: Member Meal Preferences */}
+      {/* Member Meal Preferences */}
       <Route
         path="/meal-preferences"
         element={
@@ -182,7 +259,7 @@ function AppRoutes() {
         }
       />
 
-      {/* NEW: Member Payments */}
+      {/* Member Payments */}
       <Route
         path="/payments"
         element={
@@ -192,6 +269,7 @@ function AppRoutes() {
         }
       />
 
+      {/* Member Notices */}
       <Route
         path="/notices"
         element={
@@ -201,11 +279,24 @@ function AppRoutes() {
         }
       />
 
-      {/* Fallback Route */}
-      <Route path="*" element={<Navigate to="/" replace />} />
+
+      {/* ==================================================
+          FALLBACK ROUTE
+      ================================================== */}
+
+      <Route
+        path="*"
+        element={<Navigate to="/" replace />}
+      />
+
     </Routes>
   );
 }
+
+
+// ========================================================
+// Main App
+// ========================================================
 
 function App() {
   return (

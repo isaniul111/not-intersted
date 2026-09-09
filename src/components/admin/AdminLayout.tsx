@@ -7,6 +7,8 @@ import {
   Users,
   UtensilsCrossed,
   CreditCard,
+  ClipboardCheck,
+  Shuffle,
   DollarSign,
   Bell,
   Settings,
@@ -56,8 +58,17 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
     { icon: Users, label: 'Members', path: '/admin/members' },
     { icon: UtensilsCrossed, label: 'Meals', path: '/admin/meals' },
 
-    // NEW: Payment Management
     { icon: CreditCard, label: 'Payments', path: '/admin/payments' },
+    {
+      icon: ClipboardCheck,
+      label: 'Meal Preferences',
+      path: '/admin/meal-preferences'
+    },
+    {
+      icon: Shuffle,
+      label: 'Manager Lottery',
+      path: '/admin/manager-lottery'
+    },
 
     { icon: DollarSign, label: 'Expenses', path: '/admin/expenses' },
     { icon: Bell, label: 'Notices', path: '/admin/notices' },
