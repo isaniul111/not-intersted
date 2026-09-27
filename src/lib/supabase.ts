@@ -1,20 +1,62 @@
+
 import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
 if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error('Missing Supabase environment variables');
+  throw new Error(
+    'Missing Supabase environment variables'
+  );
 }
+
+/*
+|--------------------------------------------------------------------------
+| Supabase Client
+|--------------------------------------------------------------------------
+|
+| persistSession: true
+| -------------------
+| User login session browser localStorage-এ save থাকবে।
+|
+| Browser refresh        -> Login থাকবে
+| Tab close/open         -> Login থাকবে
+| Browser close/open     -> Login থাকবে
+| PC restart             -> Login সাধারণত থাকবে
+|
+| User Logout করলে       -> Session remove হবে
+| Browser storage clear  -> Session remove হবে
+|
+|--------------------------------------------------------------------------
+*/
 
 export const supabase = createClient(
   supabaseUrl,
-  supabaseAnonKey
+  supabaseAnonKey,
+  {
+    auth: {
+      // Save authentication session
+      persistSession: true,
+
+      // Automatically refresh access token
+      autoRefreshToken: true,
+
+      // Detect auth callback/session from URL
+      detectSessionInUrl: true,
+
+      // Explicitly use browser localStorage
+      storage: window.localStorage,
+
+      // Custom localStorage key
+      storageKey: 'mess-management-auth',
+    },
+  }
 );
 
-// =========================
-// Existing Types
-// =========================
+
+// ============================================================================
+// TYPES
+// ============================================================================
 
 export type Admin = {
   id: string;
@@ -80,9 +122,9 @@ export type FoodItem = {
 };
 
 
-// =========================
-// New Feature Types
-// =========================
+// ============================================================================
+// PAYMENT / MEAL / MONTHLY COST TYPES
+// ============================================================================
 
 export type MealRate = {
   id: string;
