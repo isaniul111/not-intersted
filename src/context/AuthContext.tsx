@@ -54,6 +54,7 @@ export const AuthProvider = ({
   children,
 }: AuthProviderProps) => {
   const [user, setUser] = useState<User | null>(null);
+
   const [role, setRole] =
     useState<UserRole>(null);
 
@@ -63,17 +64,31 @@ export const AuthProvider = ({
   const [loading, setLoading] =
     useState(true);
 
+  // ==========================================
+  // FETCH USER PROFILE
+  // ==========================================
   const fetchProfile = async (
     currentUser: User
   ) => {
     try {
+      // ----------------------------------------
       // Check Admin
-      const { data: adminData } =
-        await supabase
-          .from('admins')
-          .select('*')
-          .eq('auth_id', currentUser.id)
-          .maybeSingle();
+      // ----------------------------------------
+      const {
+        data: adminData,
+        error: adminError,
+      } = await supabase
+        .from('admins')
+        .select('*')
+        .eq('auth_id', currentUser.id)
+        .maybeSingle();
+
+      if (adminError) {
+        console.error(
+          'Error fetching admin profile:',
+          adminError
+        );
+      }
 
       if (adminData) {
         setRole('admin');
@@ -81,13 +96,24 @@ export const AuthProvider = ({
         return;
       }
 
+      // ----------------------------------------
       // Check Member
-      const { data: memberData } =
-        await supabase
-          .from('members')
-          .select('*')
-          .eq('auth_id', currentUser.id)
-          .maybeSingle();
+      // ----------------------------------------
+      const {
+        data: memberData,
+        error: memberError,
+      } = await supabase
+        .from('members')
+        .select('*')
+        .eq('auth_id', currentUser.id)
+        .maybeSingle();
+
+      if (memberError) {
+        console.error(
+          'Error fetching member profile:',
+          memberError
+        );
+      }
 
       if (memberData) {
         setRole('member');
@@ -95,9 +121,12 @@ export const AuthProvider = ({
         return;
       }
 
-      // No matching database account
+      // ----------------------------------------
+      // No matching profile
+      // ----------------------------------------
       setRole(null);
       setProfile(null);
+
     } catch (error) {
       console.error(
         'Error fetching profile:',
@@ -109,81 +138,171 @@ export const AuthProvider = ({
     }
   };
 
+  // ==========================================
+  // REFRESH PROFILE
+  // ==========================================
   const refreshProfile = async () => {
-    if (user) {
-      await fetchProfile(user);
-    }
+    if (!user) return;
+
+    await fetchProfile(user);
   };
 
+  // ==========================================
+  // INITIAL SESSION RESTORE
+  // ==========================================
   useEffect(() => {
     let mounted = true;
 
-    // Existing session
-    supabase.auth
-      .getSession()
-      .then(
-        async ({
+    const restoreSession = async () => {
+      try {
+        const {
           data: { session },
-        }) => {
-          if (!mounted) return;
+          error,
+        } = await supabase.auth.getSession();
 
-          setUser(
-            session?.user ?? null
+        if (error) {
+          console.error(
+            'Error restoring session:',
+            error
           );
-
-          if (session?.user) {
-            await fetchProfile(
-              session.user
-            );
-          }
 
           if (mounted) {
-            setLoading(false);
-          }
-        }
-      );
-
-    // Auth state changes
-    const {
-      data: { subscription },
-    } =
-      supabase.auth.onAuthStateChange(
-        async (_event, session) => {
-          if (!mounted) return;
-
-          setUser(
-            session?.user ?? null
-          );
-
-          if (session?.user) {
-            await fetchProfile(
-              session.user
-            );
-          } else {
+            setUser(null);
             setRole(null);
             setProfile(null);
           }
 
-          if (mounted) {
-            setLoading(false);
-          }
+          return;
         }
-      );
 
+        if (!mounted) return;
+
+        // --------------------------------------
+        // Existing session found
+        // --------------------------------------
+        if (session?.user) {
+          setUser(session.user);
+
+          await fetchProfile(session.user);
+        } else {
+          // ------------------------------------
+          // No existing session
+          // ------------------------------------
+          setUser(null);
+          setRole(null);
+          setProfile(null);
+        }
+
+      } catch (error) {
+        console.error(
+          'Session restore error:',
+          error
+        );
+
+        if (!mounted) return;
+
+        setUser(null);
+        setRole(null);
+        setProfile(null);
+
+      } finally {
+        if (mounted) {
+          setLoading(false);
+        }
+      }
+    };
+
+    restoreSession();
+
+    // ========================================
+    // AUTH STATE LISTENER
+    // ========================================
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(
+      (event, session) => {
+        if (!mounted) return;
+
+        console.log(
+          'Auth state changed:',
+          event
+        );
+
+        // ------------------------------------
+        // Logged in / session restored
+        // ------------------------------------
+        if (session?.user) {
+          setUser(session.user);
+
+          /*
+           * Important:
+           * Don't await fetchProfile() directly
+           * inside onAuthStateChange.
+           *
+           * We run it after the auth callback
+           * finishes to avoid blocking Supabase
+           * auth initialization.
+           */
+          setTimeout(async () => {
+            if (!mounted) return;
+
+            await fetchProfile(session.user);
+
+            if (mounted) {
+              setLoading(false);
+            }
+          }, 0);
+
+        } else {
+          // ----------------------------------
+          // Logged out
+          // ----------------------------------
+          setUser(null);
+          setRole(null);
+          setProfile(null);
+          setLoading(false);
+        }
+      }
+    );
+
+    // ========================================
+    // CLEANUP
+    // ========================================
     return () => {
       mounted = false;
       subscription.unsubscribe();
     };
   }, []);
 
+  // ==========================================
+  // SIGN OUT
+  // ==========================================
   const signOut = async () => {
-    await supabase.auth.signOut();
+    try {
+      const { error } =
+        await supabase.auth.signOut();
 
-    setUser(null);
-    setRole(null);
-    setProfile(null);
+      if (error) {
+        throw error;
+      }
+
+      setUser(null);
+      setRole(null);
+      setProfile(null);
+
+    } catch (error) {
+      console.error(
+        'Sign out error:',
+        error
+      );
+
+      throw error;
+    }
   };
 
+  // ==========================================
+  // AUTH PROVIDER
+  // ==========================================
   return (
     <AuthContext.Provider
       value={{
