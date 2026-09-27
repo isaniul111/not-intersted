@@ -5,6 +5,7 @@ import {
   CreditCard,
   Loader2,
   RefreshCw,
+  Clock3,
 } from 'lucide-react';
 
 import MemberLayout from '../../components/member/MemberLayout';
@@ -43,35 +44,36 @@ export default function MemberPayments() {
   const [paying, setPaying] = useState(false);
   const [loading, setLoading] = useState(true);
 
+  const [pendingPayment, setPendingPayment] =
+    useState<any>(null);
+
   const [message, setMessage] =
     useState<Message | null>(null);
 
   const [isDark, setIsDark] = useState(
     () =>
-      localStorage.getItem('memberTheme') !==
-      'light'
+      localStorage.getItem('memberTheme') !== 'light'
   );
 
   const currentMonth = month();
 
-  // ----------------------------------------------------------
+  // =========================================================
   // Theme listener
-  // ----------------------------------------------------------
+  // =========================================================
 
   useEffect(() => {
     const id = setInterval(() => {
       setIsDark(
-        localStorage.getItem('memberTheme') !==
-          'light'
+        localStorage.getItem('memberTheme') !== 'light'
       );
     }, 100);
 
     return () => clearInterval(id);
   }, []);
 
-  // ----------------------------------------------------------
+  // =========================================================
   // Load payment information
-  // ----------------------------------------------------------
+  // =========================================================
 
   useEffect(() => {
     if (profile) {
@@ -92,15 +94,17 @@ export default function MemberPayments() {
         );
       }
 
+      // -------------------------------------------------------
       // Generate/update current month's due
+      // -------------------------------------------------------
+
       const {
         error: generateError,
       } = await supabase.rpc(
         'generate_member_due',
         {
           p_member_id: memberId,
-          p_billing_month:
-            currentMonth,
+          p_billing_month: currentMonth,
           p_other_charge: null,
         }
       );
@@ -109,72 +113,87 @@ export default function MemberPayments() {
         throw generateError;
       }
 
-      // Load due + payment history
-      const [
-        {
-          data: dueData,
-          error: dueError,
-        },
-        {
-          data: paymentData,
-          error: paymentError,
-        },
-      ] = await Promise.all([
-        supabase
-          .from('member_payment_summary')
-          .select('*')
-          .eq(
-            'member_id',
-            memberId
-          )
-          .eq(
-            'billing_month',
-            currentMonth
-          )
-          .maybeSingle(),
+      // -------------------------------------------------------
+      // Load due
+      // -------------------------------------------------------
 
-        supabase
-          .from('payment_transactions')
-          .select(
-            `
-            id,
-            amount,
-            payment_method,
-            provider,
-            transaction_id,
-            status,
-            paid_at,
-            created_at,
-            notes
-            `
-          )
-          .eq(
-            'member_id',
-            memberId
-          )
-          .order(
-            'created_at',
-            {
-              ascending: false,
-            }
-          ),
-      ]);
+      const {
+        data: dueData,
+        error: dueError,
+      } = await supabase
+        .from('member_payment_summary')
+        .select('*')
+        .eq('member_id', memberId)
+        .eq('billing_month', currentMonth)
+        .maybeSingle();
 
       if (dueError) {
         throw dueError;
       }
 
+      // -------------------------------------------------------
+      // Load payment history
+      // -------------------------------------------------------
+
+      const {
+        data: paymentData,
+        error: paymentError,
+      } = await supabase
+        .from('payment_transactions')
+        .select(
+          `
+          id,
+          amount,
+          payment_method,
+          provider,
+          transaction_id,
+          status,
+          paid_at,
+          created_at,
+          notes,
+          due_id
+          `
+        )
+        .eq('member_id', memberId)
+        .order('created_at', {
+          ascending: false,
+        });
+
       if (paymentError) {
         throw paymentError;
       }
 
-      setDue(dueData);
-      setPayments(
-        paymentData || []
-      );
+      const allPayments = paymentData || [];
 
-      // Default amount
-      if (dueData) {
+      setDue(dueData);
+      setPayments(allPayments);
+
+      // -------------------------------------------------------
+      // IMPORTANT:
+      // Check whether current due already has a pending payment
+      // -------------------------------------------------------
+
+      const currentDueId = dueData?.id;
+
+      const pending = currentDueId
+        ? allPayments.find(
+            (payment) =>
+              payment.due_id === currentDueId &&
+              payment.status === 'pending'
+          )
+        : null;
+
+      setPendingPayment(pending || null);
+
+      // -------------------------------------------------------
+      // Amount handling
+      // -------------------------------------------------------
+
+      if (pending) {
+        // Payment already submitted.
+        // DO NOT allow another amount.
+        setAmount('');
+      } else if (dueData) {
         const balance = Number(
           dueData.balance || 0
         );
@@ -199,14 +218,31 @@ export default function MemberPayments() {
     }
   }
 
-  // ----------------------------------------------------------
-  // Submit manual payment
-  // ----------------------------------------------------------
+  // =========================================================
+  // Submit payment
+  // =========================================================
 
   async function submitPayment() {
+    // -------------------------------------------------------
+    // HARD FRONTEND BLOCK
+    // -------------------------------------------------------
+
+    if (pendingPayment) {
+      setMessage({
+        type: 'info',
+        text:
+          'You already have a pending payment request. Please wait until the admin accepts or rejects it.',
+      });
+
+      return;
+    }
+
     const n = Number(amount);
 
-    // Minimum payment
+    // -------------------------------------------------------
+    // Validate amount
+    // -------------------------------------------------------
+
     if (
       !Number.isFinite(n) ||
       n < 10
@@ -252,21 +288,59 @@ export default function MemberPayments() {
         );
       }
 
-      // ------------------------------------------------------
-      // IMPORTANT:
+      // -------------------------------------------------------
+      // SECOND CHECK FROM DATABASE
       //
-      // We intentionally DO NOT compare payment amount
-      // with current due.
+      // This protects against:
       //
-      // Example:
-      //
-      // Current due = ৳1,000
-      // Payment     = ৳1,500
-      //
-      // Allowed.
-      // After admin verification:
-      // Advance = ৳500
-      // ------------------------------------------------------
+      // - double click
+      // - multiple browser tabs
+      // - another request submitted simultaneously
+      // -------------------------------------------------------
+
+      const {
+        data: existingPending,
+        error: pendingError,
+      } = await supabase
+        .from('payment_transactions')
+        .select(
+          `
+          id,
+          amount,
+          status,
+          created_at,
+          due_id
+          `
+        )
+        .eq('member_id', memberId)
+        .eq('due_id', due.id)
+        .eq('status', 'pending')
+        .limit(1)
+        .maybeSingle();
+
+      if (pendingError) {
+        throw pendingError;
+      }
+
+      if (existingPending) {
+        setPendingPayment(
+          existingPending
+        );
+
+        setAmount('');
+
+        setMessage({
+          type: 'info',
+          text:
+            'A payment request is already pending. Please wait for admin verification.',
+        });
+
+        return;
+      }
+
+      // -------------------------------------------------------
+      // Generate transaction ID
+      // -------------------------------------------------------
 
       const transactionId =
         `MAN-${Date.now()}-${Math.random()
@@ -274,12 +348,15 @@ export default function MemberPayments() {
           .slice(2, 8)
           .toUpperCase()}`;
 
+      // -------------------------------------------------------
+      // Insert payment
+      // -------------------------------------------------------
+
       const {
+        data: insertedPayment,
         error,
       } = await supabase
-        .from(
-          'payment_transactions'
-        )
+        .from('payment_transactions')
         .insert({
           member_id: memberId,
           hostel_id: hostelId,
@@ -295,19 +372,57 @@ export default function MemberPayments() {
           status: 'pending',
           notes:
             'Manual payment submitted by member',
-        });
+        })
+        .select(
+          `
+          id,
+          amount,
+          status,
+          created_at,
+          due_id
+          `
+        )
+        .single();
+
+      // -------------------------------------------------------
+      // Database unique index can reject duplicate pending
+      // payment even if two requests arrive simultaneously.
+      // -------------------------------------------------------
 
       if (error) {
+        // PostgreSQL unique violation
+        if (
+          error.code === '23505'
+        ) {
+          setMessage({
+            type: 'info',
+            text:
+              'A payment request is already pending for this due. Please wait for admin verification.',
+          });
+
+          await load();
+
+          return;
+        }
+
         throw error;
       }
+
+      // -------------------------------------------------------
+      // Lock payment form immediately
+      // -------------------------------------------------------
+
+      setPendingPayment(
+        insertedPayment
+      );
+
+      setAmount('');
 
       setMessage({
         type: 'success',
         text:
-          'Payment request submitted successfully. Admin will verify it and your balance will update.',
+          'Payment request submitted successfully. You cannot submit another payment until admin accepts or rejects this request.',
       });
-
-      setAmount('');
 
       await load();
     } catch (e: any) {
@@ -322,9 +437,9 @@ export default function MemberPayments() {
     }
   }
 
-  // ----------------------------------------------------------
+  // =========================================================
   // Loading
-  // ----------------------------------------------------------
+  // =========================================================
 
   if (loading) {
     return (
@@ -336,9 +451,9 @@ export default function MemberPayments() {
     );
   }
 
-  // ----------------------------------------------------------
+  // =========================================================
   // Current balance
-  // ----------------------------------------------------------
+  // =========================================================
 
   const balance = Number(
     due?.balance || 0
@@ -382,26 +497,25 @@ export default function MemberPayments() {
             </h1>
 
             <p className="text-sm mt-2 text-slate-500">
-              Submit any payment amount.
-              Extra verified payment stays
-              as advance credit.
+              Submit a payment and wait for
+              admin verification.
             </p>
           </div>
 
           <button
             onClick={load}
+            disabled={paying}
             className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border ${
               isDark
                 ? 'border-white/10 bg-white/5 text-slate-300'
                 : 'border-slate-200 bg-white text-slate-700'
-            }`}
+            } disabled:opacity-50`}
           >
             <RefreshCw size={16} />
             Refresh
           </button>
 
         </div>
-
 
         {/* ==================================================
             MESSAGE
@@ -410,24 +524,19 @@ export default function MemberPayments() {
         {message && (
           <div
             className={`mb-5 rounded-2xl border p-4 text-sm flex gap-2 ${
-              message.type ===
-              'success'
+              message.type === 'success'
                 ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-500'
-                : message.type ===
-                  'error'
+                : message.type === 'error'
                 ? 'bg-rose-500/10 border-rose-500/20 text-rose-500'
                 : 'bg-indigo-500/10 border-indigo-500/20 text-indigo-500'
             }`}
           >
-            {message.type ===
-            'success' ? (
-              <CheckCircle2
-                size={18}
-              />
+            {message.type === 'success' ? (
+              <CheckCircle2 size={18} />
+            ) : message.type === 'info' ? (
+              <Clock3 size={18} />
             ) : (
-              <AlertCircle
-                size={18}
-              />
+              <AlertCircle size={18} />
             )}
 
             <span>
@@ -436,6 +545,63 @@ export default function MemberPayments() {
           </div>
         )}
 
+        {/* ==================================================
+            PENDING PAYMENT WARNING
+        ================================================== */}
+
+        {pendingPayment && (
+          <div
+            className={`mb-5 rounded-2xl border p-5 ${
+              isDark
+                ? 'bg-amber-500/10 border-amber-500/20'
+                : 'bg-amber-50 border-amber-200'
+            }`}
+          >
+            <div className="flex items-start gap-3">
+
+              <Clock3
+                className="text-amber-500 mt-0.5"
+                size={22}
+              />
+
+              <div>
+                <p
+                  className={`font-bold ${
+                    isDark
+                      ? 'text-amber-300'
+                      : 'text-amber-700'
+                  }`}
+                >
+                  Payment Verification Pending
+                </p>
+
+                <p className="text-sm text-slate-500 mt-1">
+                  You have already submitted a payment
+                  request of{' '}
+                  <strong>
+                    {money(
+                      pendingPayment.amount
+                    )}
+                  </strong>
+                  .
+                </p>
+
+                <p className="text-sm text-slate-500 mt-1">
+                  You cannot submit another payment
+                  until the admin accepts or rejects
+                  this request.
+                </p>
+
+                <p className="text-xs text-slate-500 mt-2">
+                  Transaction ID:{' '}
+                  {pendingPayment.transaction_id ||
+                    'Pending'}
+                </p>
+              </div>
+
+            </div>
+          </div>
+        )}
 
         {/* ==================================================
             BALANCE + PAYMENT
@@ -443,9 +609,9 @@ export default function MemberPayments() {
 
         <div className="grid lg:grid-cols-3 gap-5">
 
-          {/* ================================================
+          {/* ==================================================
               CURRENT BALANCE
-          ================================================ */}
+          ================================================== */}
 
           <div
             className={`lg:col-span-2 rounded-3xl border p-6 sm:p-8 ${
@@ -463,24 +629,17 @@ export default function MemberPayments() {
               className={`text-4xl sm:text-5xl font-black mt-2 ${
                 balance > 0
                   ? 'text-rose-500'
-                  : balance < 0
-                  ? 'text-emerald-500'
                   : 'text-emerald-500'
               }`}
             >
               {balance > 0
-                ? `Due ${money(
-                    balance
-                  )}`
+                ? `Due ${money(balance)}`
                 : balance < 0
                 ? `Advance ${money(
-                    Math.abs(
-                      balance
-                    )
+                    Math.abs(balance)
                   )}`
                 : 'Settled'}
             </p>
-
 
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-7">
 
@@ -518,7 +677,6 @@ export default function MemberPayments() {
 
             </div>
 
-
             {/* Advance */}
 
             <div
@@ -528,6 +686,7 @@ export default function MemberPayments() {
                   : 'bg-emerald-50'
               }`}
             >
+
               <p className="text-xs uppercase tracking-widest font-bold text-slate-500">
                 Advance Credit
               </p>
@@ -540,17 +699,17 @@ export default function MemberPayments() {
 
               <p className="text-xs text-slate-500 mt-1">
                 Extra verified payment is
-                automatically kept as
-                advance credit.
+                automatically kept as advance
+                credit.
               </p>
+
             </div>
 
           </div>
 
-
-          {/* ================================================
+          {/* ==================================================
               MAKE PAYMENT
-          ================================================ */}
+          ================================================== */}
 
           <div
             className={`rounded-3xl border p-6 ${
@@ -570,237 +729,273 @@ export default function MemberPayments() {
               Make a Payment
             </h2>
 
+            {/* ------------------------------------------------
+                PENDING STATE
+            ------------------------------------------------ */}
 
-            {/* Amount */}
+            {pendingPayment ? (
+              <div className="mt-5">
 
-            <label className="block text-xs font-bold uppercase tracking-widest text-slate-500 mt-5">
-              Amount
-            </label>
+                <div
+                  className={`rounded-2xl p-5 border ${
+                    isDark
+                      ? 'bg-amber-500/10 border-amber-500/20'
+                      : 'bg-amber-50 border-amber-200'
+                  }`}
+                >
 
-            <input
-              type="number"
-              min="10"
-              step="0.01"
-              value={amount}
-              onChange={(e) =>
-                setAmount(
-                  e.target.value
-                )
-              }
-              placeholder="Enter amount"
-              className={`w-full mt-2 px-4 py-3 rounded-xl border ${
-                isDark
-                  ? 'bg-slate-900/60 border-white/10 text-white placeholder:text-slate-600'
-                  : 'bg-slate-50 border-slate-200 text-slate-900'
-              }`}
-            />
+                  <Clock3
+                    size={28}
+                    className="text-amber-500 mb-3"
+                  />
 
+                  <p
+                    className={`font-bold ${
+                      isDark
+                        ? 'text-amber-300'
+                        : 'text-amber-700'
+                    }`}
+                  >
+                    Payment Pending
+                  </p>
 
-            {/* Payment method */}
+                  <p className="text-sm text-slate-500 mt-2">
+                    Amount:{' '}
+                    <strong>
+                      {money(
+                        pendingPayment.amount
+                      )}
+                    </strong>
+                  </p>
 
-            <label className="block text-xs font-bold uppercase tracking-widest text-slate-500 mt-4">
-              Payment Method
-            </label>
+                  <p className="text-xs text-slate-500 mt-2">
+                    Please wait until the admin
+                    accepts or rejects this payment.
+                  </p>
 
-            <select
-              value={method}
-              onChange={(e) =>
-                setMethod(
-                  e.target.value
-                )
-              }
-              className={`w-full mt-2 px-4 py-3 rounded-xl border ${
-                isDark
-                  ? 'bg-slate-900/60 border-white/10 text-white'
-                  : 'bg-slate-50 border-slate-200 text-slate-900'
-              }`}
-            >
+                </div>
 
-              <option value="bkash">
-                bKash
-              </option>
+                <button
+                  disabled
+                  className="w-full mt-4 px-4 py-3.5 rounded-xl bg-slate-500/30 text-slate-500 font-bold cursor-not-allowed"
+                >
+                  Payment Locked
+                </button>
 
-              <option value="nagad">
-                Nagad
-              </option>
+              </div>
+            ) : (
+              <>
+                {/* Amount */}
 
-              <option value="bank_transfer">
-                Bank Transfer
-              </option>
+                <label className="block text-xs font-bold uppercase tracking-widest text-slate-500 mt-5">
+                  Amount
+                </label>
 
-              <option value="cash">
-                Cash
-              </option>
-
-            </select>
-
-
-            {/* Submit */}
-
-            <button
-              onClick={
-                submitPayment
-              }
-              disabled={paying}
-              className="w-full mt-4 flex items-center justify-center gap-2 px-4 py-3.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold disabled:opacity-60"
-            >
-
-              {paying ? (
-                <Loader2
-                  size={18}
-                  className="animate-spin"
+                <input
+                  type="number"
+                  min="10"
+                  step="0.01"
+                  value={amount}
+                  onChange={(e) =>
+                    setAmount(
+                      e.target.value
+                    )
+                  }
+                  placeholder="Enter amount"
+                  disabled={paying}
+                  className={`w-full mt-2 px-4 py-3 rounded-xl border ${
+                    isDark
+                      ? 'bg-slate-900/60 border-white/10 text-white placeholder:text-slate-600'
+                      : 'bg-slate-50 border-slate-200 text-slate-900'
+                  } disabled:opacity-50`}
                 />
-              ) : (
-                <CreditCard
-                  size={18}
-                />
-              )}
 
-              Submit Payment Request
+                {/* Payment method */}
 
-            </button>
+                <label className="block text-xs font-bold uppercase tracking-widest text-slate-500 mt-4">
+                  Payment Method
+                </label>
 
+                <select
+                  value={method}
+                  onChange={(e) =>
+                    setMethod(
+                      e.target.value
+                    )
+                  }
+                  disabled={paying}
+                  className={`w-full mt-2 px-4 py-3 rounded-xl border ${
+                    isDark
+                      ? 'bg-slate-900/60 border-white/10 text-white'
+                      : 'bg-slate-50 border-slate-200 text-slate-900'
+                  } disabled:opacity-50`}
+                >
 
-            <p className="text-[11px] text-slate-500 mt-3">
-              Minimum payment is BDT 10.
-              You can pay less or more than
-              your current due. Extra verified
-              payment becomes advance credit.
-            </p>
+                  <option value="bkash">
+                    bKash
+                  </option>
+
+                  <option value="nagad">
+                    Nagad
+                  </option>
+
+                  <option value="bank_transfer">
+                    Bank Transfer
+                  </option>
+
+                  <option value="cash">
+                    Cash
+                  </option>
+
+                </select>
+
+                {/* Submit */}
+
+                <button
+                  onClick={
+                    submitPayment
+                  }
+                  disabled={
+                    paying ||
+                    !amount
+                  }
+                  className="w-full mt-4 flex items-center justify-center gap-2 px-4 py-3.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold disabled:opacity-60"
+                >
+
+                  {paying ? (
+                    <Loader2
+                      size={18}
+                      className="animate-spin"
+                    />
+                  ) : (
+                    <CreditCard
+                      size={18}
+                    />
+                  )}
+
+                  Submit Payment Request
+
+                </button>
+
+                <p className="text-[11px] text-slate-500 mt-3">
+                  After submitting a payment,
+                  the payment form will remain locked
+                  until an admin accepts or rejects
+                  the request.
+                </p>
+              </>
+            )}
 
           </div>
 
         </div>
-
 
         {/* ==================================================
             PAYMENT HISTORY
         ================================================== */}
 
         <div
-          className={`mt-6 rounded-3xl border overflow-hidden ${
+          className={`mt-5 rounded-3xl border p-6 ${
             isDark
               ? 'bg-slate-800/50 border-white/5'
-              : 'bg-white border-slate-200 shadow-sm'
+              : 'bg-white border-slate-200'
           }`}
         >
 
-          <div className="p-5 border-b border-slate-200/10">
-
-            <h2
-              className={`font-bold ${
-                isDark
-                  ? 'text-white'
-                  : 'text-slate-900'
-              }`}
-            >
-              Payment History
-            </h2>
-
-          </div>
-
+          <h2
+            className={`text-lg font-bold ${
+              isDark
+                ? 'text-white'
+                : 'text-slate-900'
+            }`}
+          >
+            Payment History
+          </h2>
 
           {payments.length === 0 ? (
-
-            <div className="p-10 text-center text-sm text-slate-500">
-              No payment transactions yet.
+            <div className="py-10 text-center text-sm text-slate-500">
+              No payment history found.
             </div>
-
           ) : (
+            <div className="mt-5 overflow-x-auto">
 
-            <div className="overflow-x-auto">
-
-              <table className="w-full min-w-[820px] text-left">
+              <table className="w-full text-sm">
 
                 <thead>
-
-                  <tr
-                    className={
-                      isDark
-                        ? 'bg-slate-900/50'
-                        : 'bg-slate-50'
-                    }
-                  >
-
-                    <th className="px-5 py-3 text-xs uppercase tracking-widest text-slate-500">
-                      Date
-                    </th>
-
-                    <th className="px-5 py-3 text-xs uppercase tracking-widest text-slate-500">
+                  <tr className="text-left text-slate-500 border-b border-white/5">
+                    <th className="py-3 pr-4">
                       Amount
                     </th>
 
-                    <th className="px-5 py-3 text-xs uppercase tracking-widest text-slate-500">
+                    <th className="py-3 pr-4">
                       Method
                     </th>
 
-                    <th className="px-5 py-3 text-xs uppercase tracking-widest text-slate-500">
-                      Transaction
-                    </th>
-
-                    <th className="px-5 py-3 text-xs uppercase tracking-widest text-slate-500">
+                    <th className="py-3 pr-4">
                       Status
                     </th>
 
-                  </tr>
+                    <th className="py-3 pr-4">
+                      Transaction ID
+                    </th>
 
+                    <th className="py-3">
+                      Date
+                    </th>
+                  </tr>
                 </thead>
 
-
-                <tbody className="divide-y divide-slate-200/10">
+                <tbody>
 
                   {payments.map(
-                    (p) => (
+                    (payment) => (
                       <tr
-                        key={p.id}
+                        key={
+                          payment.id
+                        }
+                        className="border-b border-white/5"
                       >
 
-                        <td className="px-5 py-3 text-sm text-slate-400">
-                          {new Date(
-                            p.created_at
-                          ).toLocaleString(
-                            'en-BD'
-                          )}
-                        </td>
-
                         <td
-                          className={`px-5 py-3 text-sm font-bold ${
+                          className={`py-4 pr-4 font-bold ${
                             isDark
-                              ? 'text-slate-200'
-                              : 'text-slate-800'
+                              ? 'text-white'
+                              : 'text-slate-900'
                           }`}
                         >
                           {money(
-                            p.amount
+                            payment.amount
                           )}
                         </td>
 
-                        <td className="px-5 py-3 text-sm text-slate-400">
-                          {formatMethod(
-                            p.payment_method
-                          )}
-                        </td>
-
-                        <td className="px-5 py-3 text-xs text-slate-500 font-mono">
-                          {p.transaction_id ||
+                        <td className="py-4 pr-4 text-slate-500">
+                          {payment.payment_method ||
                             '-'}
                         </td>
 
-                        <td
-                          className={`px-5 py-3 text-sm font-bold uppercase ${
-                            p.status ===
-                            'paid'
-                              ? 'text-emerald-500'
-                              : p.status ===
-                                'failed'
-                              ? 'text-rose-500'
-                              : p.status ===
-                                'cancelled'
-                              ? 'text-slate-500'
-                              : 'text-amber-500'
-                          }`}
-                        >
-                          {p.status}
+                        <td className="py-4 pr-4">
+
+                          <StatusBadge
+                            status={
+                              payment.status
+                            }
+                          />
+
+                        </td>
+
+                        <td className="py-4 pr-4 text-xs text-slate-500">
+                          {payment.transaction_id ||
+                            '-'}
+                        </td>
+
+                        <td className="py-4 text-xs text-slate-500">
+                          {payment.created_at
+                            ? new Date(
+                                payment.created_at
+                              ).toLocaleString(
+                                'en-BD'
+                              )
+                            : '-'}
                         </td>
 
                       </tr>
@@ -812,7 +1007,6 @@ export default function MemberPayments() {
               </table>
 
             </div>
-
           )}
 
         </div>
@@ -822,10 +1016,9 @@ export default function MemberPayments() {
   );
 }
 
-
-// ==========================================================
+// ============================================================
 // STAT COMPONENT
-// ==========================================================
+// ============================================================
 
 function Stat({
   label,
@@ -838,19 +1031,18 @@ function Stat({
 }) {
   return (
     <div
-      className={`rounded-2xl p-3 ${
+      className={`rounded-2xl p-4 ${
         dark
-          ? 'bg-white/[0.03]'
+          ? 'bg-slate-900/40'
           : 'bg-slate-50'
       }`}
     >
-
       <p className="text-[10px] uppercase tracking-widest font-bold text-slate-500">
         {label}
       </p>
 
       <p
-        className={`text-sm font-bold mt-1 ${
+        className={`font-bold mt-1 ${
           dark
             ? 'text-slate-200'
             : 'text-slate-800'
@@ -858,33 +1050,59 @@ function Stat({
       >
         {value}
       </p>
-
     </div>
   );
 }
 
+// ============================================================
+// STATUS BADGE
+// ============================================================
 
-// ==========================================================
-// PAYMENT METHOD FORMAT
-// ==========================================================
+function StatusBadge({
+  status,
+}: {
+  status: string;
+}) {
+  const normalized =
+    String(status || '').toLowerCase();
 
-function formatMethod(
-  method: string
-) {
-  switch (method) {
-    case 'bkash':
-      return 'bKash';
-
-    case 'nagad':
-      return 'Nagad';
-
-    case 'bank_transfer':
-      return 'Bank Transfer';
-
-    case 'cash':
-      return 'Cash';
-
-    default:
-      return method || '-';
+  if (normalized === 'pending') {
+    return (
+      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-amber-500/10 text-amber-500">
+        <Clock3 size={13} />
+        Pending
+      </span>
+    );
   }
+
+  if (
+    normalized === 'paid' ||
+    normalized === 'approved' ||
+    normalized === 'success'
+  ) {
+    return (
+      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-500/10 text-emerald-500">
+        <CheckCircle2 size={13} />
+        Paid
+      </span>
+    );
+  }
+
+  if (
+    normalized === 'failed' ||
+    normalized === 'rejected'
+  ) {
+    return (
+      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-rose-500/10 text-rose-500">
+        <AlertCircle size={13} />
+        Rejected
+      </span>
+    );
+  }
+
+  return (
+    <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-slate-500/10 text-slate-500">
+      {status || 'Unknown'}
+    </span>
+  );
 }

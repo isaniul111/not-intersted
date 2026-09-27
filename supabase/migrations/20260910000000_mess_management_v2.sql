@@ -1565,3 +1565,12 @@ BEGIN
   RAISE NOTICE
     'Mess Management V2 migration completed successfully.';
 END $$;
+
+-- =========================================================
+-- Prevent multiple pending payments for the same due
+-- =========================================================
+
+CREATE UNIQUE INDEX IF NOT EXISTS
+payment_transactions_one_pending_per_due
+ON public.payment_transactions (due_id)
+WHERE status = 'pending';
