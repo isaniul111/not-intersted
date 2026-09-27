@@ -1574,3 +1574,171 @@ CREATE UNIQUE INDEX IF NOT EXISTS
 payment_transactions_one_pending_per_due
 ON public.payment_transactions (due_id)
 WHERE status = 'pending';
+
+
+-- ============================================================
+-- MEAL PREFERENCE UPGRADE
+-- ============================================================
+
+-- 1. Extra status columns
+ALTER TABLE meal_preferences
+ADD COLUMN IF NOT EXISTS status text
+DEFAULT 'submitted';
+
+ALTER TABLE meal_preferences
+ADD COLUMN IF NOT EXISTS submitted_at timestamptz
+DEFAULT now();
+
+ALTER TABLE meal_preferences
+ADD COLUMN IF NOT EXISTS locked_at timestamptz;
+
+
+-- 2. Status validation
+ALTER TABLE meal_preferences
+DROP CONSTRAINT IF EXISTS meal_preferences_status_check;
+
+ALTER TABLE meal_preferences
+ADD CONSTRAINT meal_preferences_status_check
+CHECK (
+  status IN (
+    'submitted',
+    'locked',
+    'cancelled'
+  )
+);
+
+
+-- 3. Useful indexes
+CREATE INDEX IF NOT EXISTS
+idx_meal_preferences_meal_time
+ON meal_preferences(meal_id, meal_time);
+
+CREATE INDEX IF NOT EXISTS
+idx_meal_preferences_member
+ON meal_preferences(member_id);
+
+CREATE INDEX IF NOT EXISTS
+idx_meal_preferences_date_time
+ON meal_preferences(meal_date, meal_time);
+
+
+-- ============================================================
+-- 4. Admin can view all preferences of own hostel
+-- ============================================================
+
+DROP POLICY IF EXISTS
+"Admins can view hostel preferences"
+ON meal_preferences;
+
+CREATE POLICY
+"Admins can view hostel preferences"
+ON meal_preferences
+FOR SELECT
+TO authenticated
+USING (
+  EXISTS (
+    SELECT 1
+    FROM admins a
+    WHERE a.id = meal_preferences.hostel_id
+      AND a.auth_id = auth.uid()
+  )
+);
+
+
+-- ============================================================
+-- 5. Members can view hostel preferences
+-- ============================================================
+
+DROP POLICY IF EXISTS
+"Members can view hostel preferences"
+ON meal_preferences;
+
+CREATE POLICY
+"Members can view hostel preferences"
+ON meal_preferences
+FOR SELECT
+TO authenticated
+USING (
+  EXISTS (
+    SELECT 1
+    FROM members m
+    WHERE m.hostel_id = meal_preferences.hostel_id
+      AND m.auth_id = auth.uid()
+  )
+);
+
+
+-- ============================================================
+-- 6. Function:
+--    Get preference summary for a meal
+-- ============================================================
+
+CREATE OR REPLACE FUNCTION get_meal_preference_summary(
+  p_meal_id uuid,
+  p_meal_time text
+)
+RETURNS TABLE (
+  preferred_item text,
+  preference_count bigint
+)
+LANGUAGE sql
+SECURITY INVOKER
+AS $$
+  SELECT
+    mp.preferred_item,
+    COUNT(*) AS preference_count
+  FROM meal_preferences mp
+  WHERE mp.meal_id = p_meal_id
+    AND mp.meal_time = p_meal_time
+    AND mp.status IN ('submitted', 'locked')
+  GROUP BY mp.preferred_item
+  ORDER BY COUNT(*) DESC, mp.preferred_item;
+$$;
+
+
+-- ============================================================
+-- 7. Function:
+--    Get submitted/missing member count
+-- ============================================================
+
+CREATE OR REPLACE FUNCTION get_meal_preference_stats(
+  p_hostel_id uuid,
+  p_meal_id uuid,
+  p_meal_time text
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY INVOKER
+AS $$
+DECLARE
+  v_total_members integer;
+  v_submitted integer;
+BEGIN
+
+  SELECT COUNT(*)
+  INTO v_total_members
+  FROM members
+  WHERE hostel_id = p_hostel_id;
+
+
+  SELECT COUNT(DISTINCT member_id)
+  INTO v_submitted
+  FROM meal_preferences
+  WHERE hostel_id = p_hostel_id
+    AND meal_id = p_meal_id
+    AND meal_time = p_meal_time
+    AND status IN ('submitted', 'locked');
+
+
+  RETURN jsonb_build_object(
+    'total_members', v_total_members,
+    'submitted', v_submitted,
+    'missing', GREATEST(
+      v_total_members - v_submitted,
+      0
+    )
+  );
+
+END;
+$$;
+
