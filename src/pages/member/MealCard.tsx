@@ -1,224 +1,738 @@
-import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Calendar, CheckCircle, Circle, Utensils, Clock, Lock } from 'lucide-react';
+import {
+  Calendar,
+  Check,
+  X,
+  Utensils,
+  Sun,
+  Moon,
+} from 'lucide-react';
+
 import { MealWithRecord } from './useMealsData';
 
 type MealCardProps = {
   meal: MealWithRecord;
-  toggleMeal: (meal: MealWithRecord, type: 'day' | 'night') => void;
+  toggleMeal: (
+    meal: MealWithRecord,
+    type: 'day' | 'night'
+  ) => void;
   isDark: boolean;
   itemVariants: any;
 };
 
-export default function MealCard({ meal, toggleMeal, isDark, itemVariants }: MealCardProps) {
-  const [now, setNow] = useState(new Date());
-
-  useEffect(() => {
-    const timer = setInterval(() => setNow(new Date()), 1000);
-    return () => clearInterval(timer);
-  }, []);
+export default function MealCard({
+  meal,
+  toggleMeal,
+  isDark,
+  itemVariants,
+}: MealCardProps) {
 
   const mealDate = new Date(meal.date);
-  const isToday = mealDate.toISOString().split('T')[0] === new Date().toISOString().split('T')[0];
 
-  const dayCutoff = new Date(`${meal.date}T08:00:00`);
-  const nightCutoff = new Date(`${meal.date}T20:00:00`);
+  const dayOn =
+    meal.record?.day_meal === true;
 
-  const isDayLocked = now > dayCutoff;
-  const isNightLocked = now > nightCutoff;
+  const nightOn =
+    meal.record?.night_meal === true;
 
-  const formatTimeLeft = (targetDate: Date) => {
-    const diff = targetDate.getTime() - now.getTime();
-    if (diff <= 0) return 'Locked';
-
-    const h = Math.floor(diff / (1000 * 60 * 60));
-    const m = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-    const s = Math.floor((diff % (1000 * 60)) / 1000);
-
-    if (h > 24) {
-      const d = Math.floor(h / 24);
-      return `Closes in ${d}d ${h % 24}h`;
-    }
-    return `Closes in ${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
-  };
 
   return (
     <motion.div
       variants={itemVariants}
-      className={`relative p-6 sm:p-8 rounded-3xl border transition-all duration-300 ${
-        isDark 
-          ? isToday 
-            ? 'bg-indigo-900/20 border-indigo-500/30 shadow-[0_0_30px_rgba(99,102,241,0.1)]' 
-            : 'bg-slate-800/60 border-white/5 shadow-lg'
-          : isToday
-            ? 'bg-indigo-50 border-indigo-200 shadow-sm'
-            : 'bg-white border-slate-200 shadow-sm hover:shadow-xl'
+      className={`relative overflow-hidden rounded-3xl border transition-all duration-300 ${
+        isDark
+          ? 'bg-slate-800/60 border-white/5 shadow-lg'
+          : 'bg-white border-slate-200 shadow-sm'
       }`}
     >
-      {/* Card Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-        <div className="flex items-center gap-4">
-          <div className={`p-3 rounded-2xl ${
-            isToday 
-              ? (isDark ? 'bg-indigo-500/20 text-indigo-400' : 'bg-indigo-100 text-indigo-600')
-              : (isDark ? 'bg-slate-700/50 text-slate-400' : 'bg-slate-100 text-slate-500')
-          }`}>
-            <Calendar className="w-6 h-6" />
+
+      {/* =====================================================
+          DATE HEADER
+      ===================================================== */}
+
+      <div
+        className={`px-5 py-4 border-b ${
+          isDark
+            ? 'border-white/5'
+            : 'border-slate-100'
+        }`}
+      >
+
+        <div className="flex items-center gap-3">
+
+          <div
+            className={`p-2.5 rounded-xl ${
+              isDark
+                ? 'bg-indigo-500/10 text-indigo-400'
+                : 'bg-indigo-50 text-indigo-600'
+            }`}
+          >
+            <Calendar size={19} />
           </div>
+
+
           <div>
-            <h3 className={`text-xl font-bold tracking-tight mb-1 ${isDark ? 'text-white' : 'text-slate-900'}`}>
-              {mealDate.toLocaleDateString('en-US', {
-                weekday: 'long',
-                year: 'numeric',
-                month: 'long',
-                day: 'numeric',
-              })}
+
+            <h3
+              className={`text-sm sm:text-base font-bold uppercase tracking-wider ${
+                isDark
+                  ? 'text-indigo-400'
+                  : 'text-indigo-600'
+              }`}
+            >
+              {mealDate.toLocaleDateString(
+                'en-US',
+                {
+                  weekday: 'long',
+                  day: '2-digit',
+                  month: 'short',
+                  year: 'numeric',
+                }
+              )}
             </h3>
-            {isToday ? (
-              <div className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-widest ${
-                isDark ? 'bg-indigo-500/20 text-indigo-400' : 'bg-indigo-100 text-indigo-700'
-              }`}>
-                <div className="w-1.5 h-1.5 rounded-full bg-current animate-pulse" />
-                Today
-              </div>
-            ) : (
-              <p className={`text-xs font-semibold uppercase tracking-widest ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
-                Scheduled
-              </p>
-            )}
+
           </div>
+
         </div>
+
       </div>
 
-      {/* Meal Selection Buttons */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        
-        {/* Day Meal Button */}
-        <button
-          onClick={() => !isDayLocked && toggleMeal(meal, 'day')}
-          disabled={isDayLocked}
-          className={`group relative overflow-hidden flex flex-col items-center justify-center gap-3 p-5 rounded-2xl border-2 transition-all duration-300 ${
-            isDayLocked 
-              ? (isDark ? 'bg-slate-900/30 border-slate-800 text-slate-600 opacity-60 cursor-not-allowed' : 'bg-slate-100 border-slate-200 text-slate-400 opacity-70 cursor-not-allowed grayscale')
-              : meal.record?.day_meal
-                ? (isDark 
-                    ? 'bg-amber-500/10 border-amber-500/30 text-amber-400 shadow-[inset_0_0_20px_rgba(245,158,11,0.05)]' 
-                    : 'bg-amber-50 border-amber-300 text-amber-700 shadow-sm')
-                : (isDark 
-                    ? 'bg-slate-900/40 border-slate-700/50 hover:border-amber-500/30 text-slate-400 hover:text-amber-400' 
-                    : 'bg-slate-50 border-slate-200 hover:border-amber-300 text-slate-500 hover:text-amber-600 hover:bg-white')
+
+      {/* =====================================================
+          MEALS
+      ===================================================== */}
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 p-5">
+
+
+        {/* ===================================================
+            DAY MEAL
+        =================================================== */}
+
+        <div
+          className={`overflow-hidden rounded-2xl border ${
+            isDark
+              ? 'border-white/10 bg-slate-900/40'
+              : 'border-slate-200 bg-slate-50'
           }`}
         >
-          {meal.record?.day_meal && isDark && !isDayLocked && (
-            <div className="absolute inset-0 bg-gradient-to-br from-amber-500/5 to-transparent pointer-events-none" />
-          )}
-          
-          <div className="relative z-10 flex flex-col items-center gap-2 w-full">
-            <div className={`w-full flex items-center justify-center gap-1.5 py-1 px-3 rounded-t-lg text-[11px] font-bold tracking-wider ${
-              isDayLocked 
-                ? (isDark ? 'text-rose-500' : 'text-rose-600')
-                : (isDark ? 'text-amber-400' : 'text-amber-600')
-            }`}>
-              {isDayLocked ? <Lock className="w-3.5 h-3.5" /> : <Clock className="w-3.5 h-3.5" />}
-              {formatTimeLeft(dayCutoff)}
+
+          {/* IMAGE */}
+
+          {meal.day_menu_image ? (
+
+            <img
+              src={meal.day_menu_image}
+              alt={
+                meal.day_menu_name ||
+                'Day Meal'
+              }
+              className="w-full h-48 object-cover"
+            />
+
+          ) : (
+
+            <div
+              className={`w-full h-48 flex items-center justify-center ${
+                isDark
+                  ? 'bg-slate-900'
+                  : 'bg-slate-100'
+              }`}
+            >
+
+              <Utensils
+                size={42}
+                className="text-slate-400"
+              />
+
             </div>
 
-            {meal.day_menu_image ? (
-              <img 
-                src={meal.day_menu_image} 
-                alt="Day Menu" 
-                className={`w-16 h-16 sm:w-20 sm:h-20 rounded-full object-cover border-4 shadow-lg transition-transform ${
-                  isDayLocked ? 'border-slate-500/20' : 'border-amber-500/30 group-hover:scale-105'
-                }`} 
+          )}
+
+
+          <div className="p-5">
+
+            {/* LABEL */}
+
+            <div className="flex items-center gap-2 mb-3">
+
+              <Sun
+                size={18}
+                className="text-amber-500"
               />
-            ) : (
-              <div className={`p-4 rounded-full ${isDark ? 'bg-slate-800' : 'bg-slate-100'}`}>
-                <Utensils className="w-8 h-8 opacity-40" />
-              </div>
-            )}
 
-            <p className={`font-bold text-center mt-1 ${
-              isDayLocked ? (isDark ? 'text-slate-500' : 'text-slate-400') : (isDark ? 'text-white' : 'text-slate-900')
-            }`}>
-              {meal.day_menu_name || 'Menu Not Set Yet'}
-            </p>
-          </div>
-          
-          <div className={`flex items-center gap-2 mt-2 relative z-10 px-4 py-1.5 rounded-full ${
-            isDayLocked ? 'bg-transparent' : 'bg-black/5 dark:bg-black/20'
-          }`}>
-            {meal.record?.day_meal ? (
-              <CheckCircle className={`w-5 h-5 fill-current ${isDayLocked ? 'text-slate-400' : 'text-amber-500'}`} strokeWidth={1.5} />
-            ) : (
-              <Circle className="w-5 h-5 opacity-50 group-hover:opacity-100 transition-opacity" strokeWidth={1.5} />
-            )}
-            <span className="font-bold tracking-wide">Day Meal</span>
-          </div>
-        </button>
+              <span className="text-xs font-bold uppercase tracking-widest text-amber-500">
+                Day Meal
+              </span>
 
-        {/* Night Meal Button */}
-        <button
-          onClick={() => !isNightLocked && toggleMeal(meal, 'night')}
-          disabled={isNightLocked}
-          className={`group relative overflow-hidden flex flex-col items-center justify-center gap-3 p-5 rounded-2xl border-2 transition-all duration-300 ${
-            isNightLocked 
-              ? (isDark ? 'bg-slate-900/30 border-slate-800 text-slate-600 opacity-60 cursor-not-allowed' : 'bg-slate-100 border-slate-200 text-slate-400 opacity-70 cursor-not-allowed grayscale')
-              : meal.record?.night_meal
-                ? (isDark 
-                    ? 'bg-indigo-500/10 border-indigo-500/30 text-indigo-400 shadow-[inset_0_0_20px_rgba(99,102,241,0.05)]' 
-                    : 'bg-indigo-50 border-indigo-300 text-indigo-700 shadow-sm')
-                : (isDark 
-                    ? 'bg-slate-900/40 border-slate-700/50 hover:border-indigo-500/30 text-slate-400 hover:text-indigo-400' 
-                    : 'bg-slate-50 border-slate-200 hover:border-indigo-300 text-slate-500 hover:text-indigo-600 hover:bg-white')
+            </div>
+
+
+            {/* MENU NAME */}
+
+            <h4
+              className={`text-xl font-bold mb-5 ${
+                isDark
+                  ? 'text-white'
+                  : 'text-slate-900'
+              }`}
+            >
+              {meal.day_menu_name ||
+                'Menu Not Set'}
+            </h4>
+
+
+            {/* ON / OFF BUTTON */}
+
+            <button
+              type="button"
+              onClick={() =>
+                toggleMeal(
+                  meal,
+                  'day'
+                )
+              }
+              className={`w-full h-12 rounded-xl flex items-center justify-center gap-2 font-bold transition-all duration-200 active:scale-[0.98] ${
+                dayOn
+                  ? 'bg-emerald-500 hover:bg-emerald-600 text-white'
+                  : isDark
+                    ? 'bg-slate-700 hover:bg-slate-600 text-slate-300'
+                    : 'bg-slate-200 hover:bg-slate-300 text-slate-600'
+              }`}
+            >
+
+              {dayOn ? (
+
+                <>
+                  <Check size={18} />
+                  Day ON
+                </>
+
+              ) : (
+
+                <>
+                  <X size={18} />
+                  Day OFF
+                </>
+
+              )}
+
+            </button>
+
+          </div>
+
+        </div>
+
+
+        {/* ===================================================
+            NIGHT MEAL
+        =================================================== */}
+
+        <div
+          className={`overflow-hidden rounded-2xl border ${
+            isDark
+              ? 'border-white/10 bg-slate-900/40'
+              : 'border-slate-200 bg-slate-50'
           }`}
         >
-          {meal.record?.night_meal && isDark && !isNightLocked && (
-            <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/5 to-transparent pointer-events-none" />
-          )}
 
-          <div className="relative z-10 flex flex-col items-center gap-2 w-full">
-            <div className={`w-full flex items-center justify-center gap-1.5 py-1 px-3 rounded-t-lg text-[11px] font-bold tracking-wider ${
-              isNightLocked 
-                ? (isDark ? 'text-rose-500' : 'text-rose-600')
-                : (isDark ? 'text-indigo-400' : 'text-indigo-600')
-            }`}>
-              {isNightLocked ? <Lock className="w-3.5 h-3.5" /> : <Clock className="w-3.5 h-3.5" />}
-              {formatTimeLeft(nightCutoff)}
+          {/* IMAGE */}
+
+          {meal.night_menu_image ? (
+
+            <img
+              src={meal.night_menu_image}
+              alt={
+                meal.night_menu_name ||
+                'Night Meal'
+              }
+              className="w-full h-48 object-cover"
+            />
+
+          ) : (
+
+            <div
+              className={`w-full h-48 flex items-center justify-center ${
+                isDark
+                  ? 'bg-slate-900'
+                  : 'bg-slate-100'
+              }`}
+            >
+
+              <Utensils
+                size={42}
+                className="text-slate-400"
+              />
+
             </div>
 
-            {meal.night_menu_image ? (
-              <img 
-                src={meal.night_menu_image} 
-                alt="Night Menu" 
-                className={`w-16 h-16 sm:w-20 sm:h-20 rounded-full object-cover border-4 shadow-lg transition-transform ${
-                  isNightLocked ? 'border-slate-500/20' : 'border-indigo-500/30 group-hover:scale-105'
-                }`} 
-              />
-            ) : (
-              <div className={`p-4 rounded-full ${isDark ? 'bg-slate-800' : 'bg-slate-100'}`}>
-                <Utensils className="w-8 h-8 opacity-40" />
-              </div>
-            )}
+          )}
 
-            <p className={`font-bold text-center mt-1 ${
-              isNightLocked ? (isDark ? 'text-slate-500' : 'text-slate-400') : (isDark ? 'text-white' : 'text-slate-900')
-            }`}>
-              {meal.night_menu_name || 'Menu Not Set Yet'}
-            </p>
+
+          <div className="p-5">
+
+            {/* LABEL */}
+
+            <div className="flex items-center gap-2 mb-3">
+
+              <Moon
+                size={18}
+                className="text-indigo-500"
+              />
+
+              <span className="text-xs font-bold uppercase tracking-widest text-indigo-500">
+                Night Meal
+              </span>
+
+            </div>
+
+
+            {/* MENU NAME */}
+
+            <h4
+              className={`text-xl font-bold mb-5 ${
+                isDark
+                  ? 'text-white'
+                  : 'text-slate-900'
+              }`}
+            >
+              {meal.night_menu_name ||
+                'Menu Not Set'}
+            </h4>
+
+
+            {/* ON / OFF BUTTON */}
+
+            <button
+              type="button"
+              onClick={() =>
+                toggleMeal(
+                  meal,
+                  'night'
+                )
+              }
+              className={`w-full h-12 rounded-xl flex items-center justify-center gap-2 font-bold transition-all duration-200 active:scale-[0.98] ${
+                nightOn
+                  ? 'bg-emerald-500 hover:bg-emerald-600 text-white'
+                  : isDark
+                    ? 'bg-slate-700 hover:bg-slate-600 text-slate-300'
+                    : 'bg-slate-200 hover:bg-slate-300 text-slate-600'
+              }`}
+            >
+
+              {nightOn ? (
+
+                <>
+                  <Check size={18} />
+                  Night ON
+                </>
+
+              ) : (
+
+                <>
+                  <X size={18} />
+                  Night OFF
+                </>
+
+              )}
+
+            </button>
+
           </div>
-          
-          <div className={`flex items-center gap-2 mt-2 relative z-10 px-4 py-1.5 rounded-full ${
-            isNightLocked ? 'bg-transparent' : 'bg-black/5 dark:bg-black/20'
-          }`}>
-            {meal.record?.night_meal ? (
-              <CheckCircle className={`w-5 h-5 fill-current ${isNightLocked ? 'text-slate-400' : 'text-indigo-500'}`} strokeWidth={1.5} />
-            ) : (
-              <Circle className="w-5 h-5 opacity-50 group-hover:opacity-100 transition-opacity" strokeWidth={1.5} />
-            )}
-            <span className="font-bold tracking-wide">Night Meal</span>
-          </div>
-        </button>
+
+        </div>
+
       </div>
+
     </motion.div>
   );
+}
+```
+
+---
+
+# 2. `src/pages/member/useMealsData.ts`
+
+এখানেও **time restriction remove করতে হবে**। তোমার current code-এ `toggleMeal()` প্রথমেই 8 AM/8 PM check করছে।
+
+পুরো file-টা এভাবে দাও:
+
+```tsx
+import { useEffect, useState } from 'react';
+
+import { supabase } from '../../lib/supabase';
+import { useAuth } from '../../context/AuthContext';
+
+
+export type MealWithRecord = {
+  id: string;
+
+  date: string;
+
+  day_menu_name?: string | null;
+  day_menu_image?: string | null;
+
+  night_menu_name?: string | null;
+  night_menu_image?: string | null;
+
+  record: {
+    id: string;
+    day_meal: boolean;
+    night_meal: boolean;
+  } | null;
+};
+
+
+export function useMealsData() {
+
+  const { profile } = useAuth();
+
+  const [meals, setMeals] =
+    useState<MealWithRecord[]>([]);
+
+  const [loading, setLoading] =
+    useState(true);
+
+  const [isDark, setIsDark] =
+    useState(
+      () =>
+        localStorage.getItem(
+          'memberTheme'
+        ) !== 'light'
+    );
+
+
+  // ==========================================================
+  // THEME
+  // ==========================================================
+
+  useEffect(() => {
+
+    const checkTheme = () => {
+
+      setIsDark(
+        localStorage.getItem(
+          'memberTheme'
+        ) !== 'light'
+      );
+
+    };
+
+    const interval =
+      setInterval(
+        checkTheme,
+        100
+      );
+
+    return () =>
+      clearInterval(interval);
+
+  }, []);
+
+
+  // ==========================================================
+  // LOAD
+  // ==========================================================
+
+  useEffect(() => {
+
+    if (profile) {
+      fetchMeals();
+    }
+
+  }, [profile]);
+
+
+  // ==========================================================
+  // FETCH MEALS
+  // ==========================================================
+
+  const fetchMeals =
+    async () => {
+
+      try {
+
+        setLoading(true);
+
+
+        const memberId =
+          (profile as any)?.id;
+
+        const hostelId =
+          (profile as any)?.hostel_id;
+
+
+        if (
+          !memberId ||
+          !hostelId
+        ) {
+
+          setMeals([]);
+
+          return;
+        }
+
+
+        // ----------------------------------------------------
+        // GET ADMIN SELECTED MEALS
+        // ----------------------------------------------------
+
+        const {
+          data: mealsData,
+          error,
+        } = await supabase
+          .from('meals')
+          .select('*')
+          .eq(
+            'hostel_id',
+            hostelId
+          )
+          .order(
+            'date',
+            {
+              ascending: false,
+            }
+          );
+
+
+        if (error) {
+          throw error;
+        }
+
+
+        // ----------------------------------------------------
+        // GET MEMBER RECORD
+        // ----------------------------------------------------
+
+        const mealsWithRecords =
+          await Promise.all(
+
+            (mealsData || []).map(
+              async (meal) => {
+
+                const {
+                  data: record,
+                  error: recordError,
+                } = await supabase
+                  .from(
+                    'meal_records'
+                  )
+                  .select(`
+                    id,
+                    day_meal,
+                    night_meal
+                  `)
+                  .eq(
+                    'meal_id',
+                    meal.id
+                  )
+                  .eq(
+                    'member_id',
+                    memberId
+                  )
+                  .maybeSingle();
+
+
+                if (
+                  recordError &&
+                  recordError.code !==
+                    'PGRST116'
+                ) {
+
+                  console.error(
+                    'Meal record error:',
+                    recordError
+                  );
+
+                }
+
+
+                return {
+
+                  id:
+                    meal.id,
+
+                  date:
+                    meal.date,
+
+                  day_menu_name:
+                    meal.day_menu_name,
+
+                  day_menu_image:
+                    meal.day_menu_image,
+
+                  night_menu_name:
+                    meal.night_menu_name,
+
+                  night_menu_image:
+                    meal.night_menu_image,
+
+                  record:
+                    record || null,
+
+                };
+
+              }
+            )
+          );
+
+
+        setMeals(
+          mealsWithRecords
+        );
+
+      } catch (error) {
+
+        console.error(
+          'Error fetching meals:',
+          error
+        );
+
+      } finally {
+
+        setLoading(false);
+
+      }
+
+    };
+
+
+  // ==========================================================
+  // TOGGLE DAY / NIGHT
+  //
+  // NO TIME LIMIT
+  // NO 8 AM
+  // NO 8 PM
+  // NO LOCK
+  // ==========================================================
+
+  const toggleMeal =
+    async (
+      meal: MealWithRecord,
+      type: 'day' | 'night'
+    ) => {
+
+      try {
+
+        const memberId =
+          (profile as any)?.id;
+
+
+        if (!memberId) {
+
+          throw new Error(
+            'Member profile not found.'
+          );
+
+        }
+
+
+        // ====================================================
+        // EXISTING RECORD
+        // ====================================================
+
+        if (meal.record?.id) {
+
+          const column =
+            type === 'day'
+              ? 'day_meal'
+              : 'night_meal';
+
+
+          const currentValue =
+            type === 'day'
+              ? meal.record.day_meal
+              : meal.record.night_meal;
+
+
+          const {
+            error,
+          } = await supabase
+            .from(
+              'meal_records'
+            )
+            .update({
+
+              [column]:
+                !currentValue,
+
+            })
+            .eq(
+              'id',
+              meal.record.id
+            );
+
+
+          if (error) {
+            throw error;
+          }
+
+        }
+
+        // ====================================================
+        // NO RECORD YET
+        // ====================================================
+
+        else {
+
+          const {
+            error,
+          } = await supabase
+            .from(
+              'meal_records'
+            )
+            .insert({
+
+              meal_id:
+                meal.id,
+
+              member_id:
+                memberId,
+
+              day_meal:
+                type === 'day',
+
+              night_meal:
+                type === 'night',
+
+            });
+
+
+          if (error) {
+            throw error;
+          }
+
+        }
+
+
+        // ====================================================
+        // REFRESH UI
+        // ====================================================
+
+        await fetchMeals();
+
+      } catch (error: any) {
+
+        console.error(
+          'Meal toggle error:',
+          error
+        );
+
+        alert(
+          error?.message ||
+          'Could not update meal preference.'
+        );
+
+      }
+
+    };
+
+
+  return {
+    meals,
+    loading,
+    isDark,
+    toggleMeal,
+  };
+
 }

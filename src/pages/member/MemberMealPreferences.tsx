@@ -1,366 +1,166 @@
-import { useEffect, useMemo, useState } from 'react';
-import { motion } from 'framer-motion';
+import { useEffect, useState } from 'react';
+
 import {
   CalendarDays,
-  Check,
+  CheckCircle2,
   Loader2,
   Moon,
   RefreshCw,
   Sun,
   Utensils,
-  Users,
 } from 'lucide-react';
 
 import MemberLayout from '../../components/member/MemberLayout';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/AuthContext';
 
-type MealRow = {
-  id: string;
-  date: string;
-  day_menu_name: string | null;
-  night_menu_name: string | null;
-  day_preference: string | null;
-  night_preference: string | null;
-};
 
-type PublicPreference = {
+type Preference = {
   id: string;
-  meal_id: string;
-  member_id: string;
+  preference_date: string;
   meal_time: 'day' | 'night';
-  preferred_item: string;
-  member?: {
-    name: string;
-  } | null;
-  meal?: {
-    date: string;
-  } | null;
+  meal_name: string;
+  cooking_comment: string | null;
 };
 
-
-// ============================================================
-// DATE FORMAT
-// ============================================================
-
-const formatDate = (date: string) =>
-  new Intl.DateTimeFormat('en-GB', {
-    weekday: 'short',
-    day: '2-digit',
-    month: 'short',
-    timeZone: 'Asia/Dhaka',
-  }).format(
-    new Date(`${date}T00:00:00+06:00`)
-  );
-
-
-// ============================================================
-// DHAKA DATE
-// ============================================================
-
-const getDhakaDate = () => {
-  const parts = new Intl.DateTimeFormat(
-    'en-US',
-    {
-      timeZone: 'Asia/Dhaka',
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-    }
-  ).formatToParts(new Date());
-
-  const get = (type: string) =>
-    parts.find(
-      (part) => part.type === type
-    )?.value || '00';
-
-  return `${get('year')}-${get(
-    'month'
-  )}-${get('day')}`;
-};
-
-
-// ============================================================
-// MAIN COMPONENT
-// ============================================================
 
 export default function MemberMealPreferences() {
+
   const { profile } = useAuth();
 
-  const [meals, setMeals] =
-    useState<MealRow[]>([]);
+  const [date, setDate] = useState(
+    new Date().toISOString().slice(0, 10)
+  );
+
+  const [mealTime, setMealTime] =
+    useState<'day' | 'night'>('day');
+
+  const [mealName, setMealName] =
+    useState('');
+
+  const [cookingComment, setCookingComment] =
+    useState('');
 
   const [preferences, setPreferences] =
-    useState<PublicPreference[]>([]);
+    useState<Preference[]>([]);
 
   const [loading, setLoading] =
     useState(true);
 
-  const [savingKey, setSavingKey] =
-    useState<string | null>(null);
+  const [saving, setSaving] =
+    useState(false);
+
+  const [message, setMessage] =
+    useState('');
 
   const [isDark, setIsDark] =
     useState(
       () =>
-        localStorage.getItem(
-          'memberTheme'
-        ) !== 'light'
+        localStorage.getItem('memberTheme') !== 'light'
     );
 
-  const today = useMemo(
-    () => getDhakaDate(),
-    []
-  );
-
-
-  // ============================================================
-  // THEME
-  // ============================================================
 
   useEffect(() => {
-    const id = window.setInterval(() => {
+
+    const interval = window.setInterval(() => {
+
       setIsDark(
-        localStorage.getItem(
-          'memberTheme'
-        ) !== 'light'
+        localStorage.getItem('memberTheme') !== 'light'
       );
+
     }, 500);
 
     return () =>
-      window.clearInterval(id);
+      window.clearInterval(interval);
+
   }, []);
 
 
-  // ============================================================
-  // LOAD DATA
-  // ============================================================
-
   useEffect(() => {
+
     if (profile) {
-      loadData();
+      loadPreferences();
     }
-  }, [profile]);
+
+  }, [profile, date]);
 
 
-  // ============================================================
-  // 24-HOUR PREFERENCE RULE
-  // ============================================================
+  const loadPreferences = async () => {
 
-  /*
-   * No 08:00 AM / 08:00 PM locking.
-   *
-   * Member can edit:
-   * - Today
-   * - Tomorrow
-   * - Future dates
-   *
-   * Past dates are kept read-only.
-   */
-
-  const isLocked = (date: string) => {
-    return date < today;
-  };
-
-
-  // ============================================================
-  // LOAD MEALS + PREFERENCES
-  // ============================================================
-
-  const loadData = async () => {
     try {
-      setLoading(true);
 
-      const hostelId =
-        (profile as any)?.hostel_id;
+      setLoading(true);
+      setMessage('');
 
       const memberId =
         (profile as any)?.id;
 
-      if (!hostelId || !memberId) {
-        setMeals([]);
+      if (!memberId) {
+
         setPreferences([]);
+
         return;
+
       }
 
-      const startDate = today;
+      const {
+        data,
+        error,
+      } = await supabase
+
+        .from('member_meal_preferences')
+
+        .select(`
+          id,
+          preference_date,
+          meal_time,
+          meal_name,
+          cooking_comment
+        `)
+
+        .eq('member_id', memberId)
+
+        .eq('preference_date', date)
+
+        .order('meal_time', {
+          ascending: true,
+        });
 
 
-      const [
-        {
-          data: mealData,
-          error: mealError,
-        },
-
-        {
-          data: prefData,
-          error: prefError,
-        },
-      ] = await Promise.all([
-
-        // --------------------------------------------------------
-        // ADMIN PUBLISHED MEALS
-        // --------------------------------------------------------
-
-        supabase
-          .from('meals')
-          .select(
-            `
-            id,
-            date,
-            day_menu_name,
-            night_menu_name
-            `
-          )
-          .eq(
-            'hostel_id',
-            hostelId
-          )
-          .gte(
-            'date',
-            startDate
-          )
-          .order('date', {
-            ascending: true,
-          })
-          .limit(31),
-
-
-        // --------------------------------------------------------
-        // MEMBER PREFERENCES
-        // --------------------------------------------------------
-
-        supabase
-          .from('meal_preferences')
-          .select(
-            `
-            id,
-            meal_id,
-            member_id,
-            meal_time,
-            preferred_item,
-            member:members(name),
-            meal:meals(date)
-            `
-          )
-          .eq(
-            'hostel_id',
-            hostelId
-          )
-          .gte(
-            'meal_date',
-            startDate
-          )
-          .order(
-            'meal_date',
-            {
-              ascending: true,
-            }
-          )
-          .order(
-            'meal_time',
-            {
-              ascending: true,
-            }
-          ),
-      ]);
-
-
-      if (mealError) {
-        throw mealError;
-      }
-
-      if (prefError) {
-        throw prefError;
+      if (error) {
+        throw error;
       }
 
 
-      // ----------------------------------------------------------
-      // NORMALIZE PREFERENCES
-      // ----------------------------------------------------------
+      const loaded =
+        (data || []) as Preference[];
 
-      const prefRows =
-        (prefData || []) as any[];
+      setPreferences(loaded);
 
 
-      const normalizedPreferences =
-        prefRows.map((p) => ({
-          ...p,
-
-          member:
-            Array.isArray(p.member)
-              ? p.member[0]
-              : p.member,
-
-          meal:
-            Array.isArray(p.meal)
-              ? p.meal[0]
-              : p.meal,
-        }));
-
-
-      setPreferences(
-        normalizedPreferences
-      );
-
-
-      // ----------------------------------------------------------
-      // ATTACH CURRENT MEMBER PREFERENCE
-      // TO EACH MEAL
-      // ----------------------------------------------------------
-
-      const rows =
-        (mealData || []).map(
-          (meal: any) => {
-
-            const dayPreference =
-              prefRows.find(
-                (p) =>
-                  p.meal_id ===
-                    meal.id &&
-                  p.member_id ===
-                    memberId &&
-                  p.meal_time ===
-                    'day'
-              );
-
-
-            const nightPreference =
-              prefRows.find(
-                (p) =>
-                  p.meal_id ===
-                    meal.id &&
-                  p.member_id ===
-                    memberId &&
-                  p.meal_time ===
-                    'night'
-              );
-
-
-            return {
-              id: meal.id,
-              date: meal.date,
-
-              day_menu_name:
-                meal.day_menu_name,
-
-              night_menu_name:
-                meal.night_menu_name,
-
-              day_preference:
-                dayPreference
-                  ?.preferred_item ||
-                null,
-
-              night_preference:
-                nightPreference
-                  ?.preferred_item ||
-                null,
-            };
-          }
+      const current =
+        loaded.find(
+          item =>
+            item.meal_time === mealTime
         );
 
 
-      setMeals(rows);
+      if (current) {
+
+        setMealName(
+          current.meal_name || ''
+        );
+
+        setCookingComment(
+          current.cooking_comment || ''
+        );
+
+      } else {
+
+        setMealName('');
+        setCookingComment('');
+
+      }
 
     } catch (error: any) {
 
@@ -369,9 +169,9 @@ export default function MemberMealPreferences() {
         error
       );
 
-      alert(
+      setMessage(
         error?.message ||
-          'Failed to load meal preferences.'
+        'Could not load preferences.'
       );
 
     } finally {
@@ -379,59 +179,49 @@ export default function MemberMealPreferences() {
       setLoading(false);
 
     }
+
   };
 
 
-  // ============================================================
-  // SAVE / UPDATE PREFERENCE
-  // ============================================================
+  const changeMealTime =
+    (
+      value: 'day' | 'night'
+    ) => {
 
-  const savePreference = async (
-    meal: MealRow,
-    mealTime: 'day' | 'night',
-    value: string
-  ) => {
+      setMealTime(value);
 
-    const savingId =
-      `${meal.id}-${mealTime}`;
-
-
-    // ----------------------------------------------------------
-    // PAST DATE
-    // ----------------------------------------------------------
-
-    if (isLocked(meal.date)) {
-
-      alert(
-        'Past date preference cannot be changed.'
-      );
-
-      return;
-    }
+      const existing =
+        preferences.find(
+          item =>
+            item.meal_time === value
+        );
 
 
-    // ----------------------------------------------------------
-    // NO MENU
-    // ----------------------------------------------------------
+      if (existing) {
 
-    if (!meal[
-      mealTime === 'day'
-        ? 'day_menu_name'
-        : 'night_menu_name'
-    ]) {
+        setMealName(
+          existing.meal_name
+        );
 
-      alert(
-        'Admin has not set the menu yet.'
-      );
+        setCookingComment(
+          existing.cooking_comment || ''
+        );
 
-      return;
-    }
+      } else {
 
+        setMealName('');
+        setCookingComment('');
+
+      }
+
+    };
+
+
+  const savePreference = async () => {
 
     try {
 
-      setSavingKey(savingId);
-
+      setMessage('');
 
       const memberId =
         (profile as any)?.id;
@@ -441,122 +231,148 @@ export default function MemberMealPreferences() {
 
 
       if (!memberId || !hostelId) {
+
         throw new Error(
-          'Member information is missing.'
+          'Member information not found.'
         );
-      }
-
-
-      // --------------------------------------------------------
-      // REMOVE PREFERENCE
-      // --------------------------------------------------------
-
-      if (!value) {
-
-        const {
-          error,
-        } = await supabase
-          .from(
-            'meal_preferences'
-          )
-          .delete()
-          .eq(
-            'meal_id',
-            meal.id
-          )
-          .eq(
-            'member_id',
-            memberId
-          )
-          .eq(
-            'meal_time',
-            mealTime
-          );
-
-
-        if (error) {
-          throw error;
-        }
 
       }
 
 
-      // --------------------------------------------------------
-      // INSERT / UPDATE PREFERENCE
-      // --------------------------------------------------------
+      if (!date) {
 
-      else {
-
-        const {
-          error,
-        } = await supabase
-          .from(
-            'meal_preferences'
-          )
-          .upsert(
-            {
-              meal_id:
-                meal.id,
-
-              member_id:
-                memberId,
-
-              hostel_id:
-                hostelId,
-
-              meal_date:
-                meal.date,
-
-              meal_time:
-                mealTime,
-
-              preferred_item:
-                value,
-            },
-            {
-              onConflict:
-                'meal_id,member_id,meal_time',
-            }
-          );
-
-
-        if (error) {
-          throw error;
-        }
+        throw new Error(
+          'Please select a date.'
+        );
 
       }
 
 
-      // Reload after save
-      await loadData();
+      if (!mealName.trim()) {
+
+        throw new Error(
+          'Please enter the meal name.'
+        );
+
+      }
+
+
+      setSaving(true);
+
+
+      const {
+        error,
+      } = await supabase
+
+        .from('member_meal_preferences')
+
+        .upsert(
+          {
+            hostel_id: hostelId,
+
+            member_id: memberId,
+
+            preference_date: date,
+
+            meal_time: mealTime,
+
+            meal_name: mealName.trim(),
+
+            cooking_comment:
+              cookingComment.trim() || null,
+          },
+          {
+            onConflict:
+              'member_id,preference_date,meal_time',
+          }
+        );
+
+
+      if (error) {
+        throw error;
+      }
+
+
+      setMessage(
+        `${
+          mealTime === 'day'
+            ? 'Day'
+            : 'Night'
+        } preference saved successfully.`
+      );
+
+
+      await loadPreferences();
 
     } catch (error: any) {
 
       console.error(
-        'Preference save error:',
+        'Save preference error:',
         error
       );
 
-      alert(
+      setMessage(
         error?.message ||
-          'Could not save preference.'
+        'Could not save preference.'
       );
 
     } finally {
 
-      setSavingKey(null);
+      setSaving(false);
 
     }
+
   };
 
 
-  // ============================================================
-  // LOADING SCREEN
-  // ============================================================
+  const deletePreference =
+    async (
+      preferenceId: string
+    ) => {
+
+      try {
+
+        const {
+          error,
+        } = await supabase
+
+          .from('member_meal_preferences')
+
+          .delete()
+
+          .eq('id', preferenceId);
+
+
+        if (error) {
+          throw error;
+        }
+
+
+        setMealName('');
+        setCookingComment('');
+
+        setMessage(
+          'Preference removed.'
+        );
+
+        await loadPreferences();
+
+      } catch (error: any) {
+
+        setMessage(
+          error?.message ||
+          'Could not remove preference.'
+        );
+
+      }
+
+    };
+
 
   if (loading) {
 
     return (
+
       <MemberLayout>
 
         <div className="min-h-[70vh] flex items-center justify-center">
@@ -568,29 +384,33 @@ export default function MemberMealPreferences() {
         </div>
 
       </MemberLayout>
+
     );
+
   }
 
 
-  // ============================================================
-  // MAIN UI
-  // ============================================================
+  const currentPreference =
+    preferences.find(
+      item =>
+        item.meal_time === mealTime
+    );
+
 
   return (
+
     <MemberLayout>
 
-      <div className="w-full max-w-6xl mx-auto">
+      <div className="w-full max-w-5xl mx-auto">
 
 
-        {/* ======================================================
-            HEADER
-        ====================================================== */}
+        {/* HEADER */}
 
         <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 mb-8">
 
           <div>
 
-            <div className="flex items-center gap-3 mb-2">
+            <div className="flex items-center gap-3">
 
               <div
                 className={`p-3 rounded-2xl ${
@@ -612,29 +432,27 @@ export default function MemberMealPreferences() {
                     : 'text-slate-900'
                 }`}
               >
+
                 Meal Preference
+
               </h1>
 
             </div>
 
 
-            <p
-              className={`text-sm ${
-                isDark
-                  ? 'text-slate-400'
-                  : 'text-slate-500'
-              }`}
-            >
-              Choose your preferred menu
-              item for each meal.
+            <p className="text-sm text-slate-500 mt-2">
+
+              Tell the manager what meal you want
+              and how you want it cooked.
+
             </p>
 
           </div>
 
 
           <button
-            onClick={loadData}
-            className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border text-sm font-semibold ${
+            onClick={loadPreferences}
+            className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border ${
               isDark
                 ? 'border-white/10 bg-white/5 text-slate-300'
                 : 'border-slate-200 bg-white text-slate-700'
@@ -650,456 +468,299 @@ export default function MemberMealPreferences() {
         </div>
 
 
-        {/* ======================================================
-            INFORMATION
-        ====================================================== */}
+        {/* FORM */}
 
         <div
-          className={`rounded-3xl border p-5 mb-6 ${
+          className={`rounded-3xl border p-6 ${
             isDark
-              ? 'bg-indigo-500/5 border-indigo-500/10'
-              : 'bg-indigo-50 border-indigo-100'
+              ? 'bg-slate-800/60 border-white/5'
+              : 'bg-white border-slate-200 shadow-sm'
           }`}
         >
 
-          <div className="flex gap-3">
 
-            <CalendarDays
-              size={20}
-              className="text-indigo-500 mt-0.5"
-            />
+          {/* DATE */}
+
+          <div className="mb-6">
+
+            <label className="text-xs font-bold uppercase tracking-widest text-slate-500">
+
+              Preference Date
+
+            </label>
 
 
-            <div>
+            <div className="relative mt-2">
 
-              <p
-                className={`font-bold ${
+              <CalendarDays
+                size={18}
+                className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
+              />
+
+
+              <input
+                type="date"
+                value={date}
+                onChange={e =>
+                  setDate(e.target.value)
+                }
+                className={`w-full pl-11 pr-4 py-3 rounded-xl border outline-none ${
                   isDark
-                    ? 'text-white'
-                    : 'text-slate-900'
+                    ? 'bg-slate-900 border-white/10 text-white'
+                    : 'bg-white border-slate-200 text-slate-900'
                 }`}
-              >
-                24-Hour Preference
-              </p>
-
-
-              <p className="text-sm text-slate-500 mt-1">
-                You can select or change your
-                preference anytime during the day.
-              </p>
-
-
-              <p className="text-xs text-slate-500 mt-1">
-                There is no 08:00 AM or 08:00 PM
-                lock. Past dates are kept read-only.
-              </p>
+              />
 
             </div>
 
           </div>
 
-        </div>
+
+          {/* DAY / NIGHT */}
+
+          <div className="mb-6">
+
+            <label className="text-xs font-bold uppercase tracking-widest text-slate-500">
+
+              Select Meal Time
+
+            </label>
 
 
-        {/* ======================================================
-            MEALS
-        ====================================================== */}
-
-        {meals.length === 0 ? (
-
-          <div
-            className={`rounded-3xl border p-12 text-center ${
-              isDark
-                ? 'bg-slate-800/40 border-white/5'
-                : 'bg-white border-slate-200'
-            }`}
-          >
-
-            <CalendarDays
-              className="w-12 h-12 mx-auto mb-4 text-slate-400"
-            />
+            <div className="grid grid-cols-2 gap-3 mt-2">
 
 
-            <h2
-              className={`font-bold text-lg ${
+              <button
+                type="button"
+                onClick={() =>
+                  changeMealTime('day')
+                }
+                className={`p-4 rounded-2xl border flex items-center justify-center gap-3 font-bold transition ${
+                  mealTime === 'day'
+                    ? 'bg-amber-500 text-white border-amber-500'
+                    : isDark
+                      ? 'bg-slate-900 border-white/10 text-slate-300'
+                      : 'bg-slate-50 border-slate-200 text-slate-600'
+                }`}
+              >
+
+                <Sun size={20} />
+
+                Day
+
+              </button>
+
+
+              <button
+                type="button"
+                onClick={() =>
+                  changeMealTime('night')
+                }
+                className={`p-4 rounded-2xl border flex items-center justify-center gap-3 font-bold transition ${
+                  mealTime === 'night'
+                    ? 'bg-indigo-600 text-white border-indigo-600'
+                    : isDark
+                      ? 'bg-slate-900 border-white/10 text-slate-300'
+                      : 'bg-slate-50 border-slate-200 text-slate-600'
+                }`}
+              >
+
+                <Moon size={20} />
+
+                Night
+
+              </button>
+
+            </div>
+
+          </div>
+
+
+          {/* MEAL NAME */}
+
+          <div className="mb-6">
+
+            <label
+              className={`text-sm font-bold ${
                 isDark
                   ? 'text-white'
                   : 'text-slate-900'
               }`}
             >
-              No meal charts available
-            </h2>
+
+              Meal Name
+
+            </label>
 
 
-            <p className="mt-1 text-sm text-slate-500">
-              Admin has not published any meal menu yet.
-            </p>
+            <input
+              type="text"
+              value={mealName}
+              onChange={e =>
+                setMealName(e.target.value)
+              }
+              placeholder="Example: Chicken Curry"
+              className={`w-full mt-2 px-4 py-3 rounded-xl border outline-none ${
+                isDark
+                  ? 'bg-slate-900 border-white/10 text-white placeholder:text-slate-600'
+                  : 'bg-white border-slate-200 text-slate-900'
+              }`}
+            />
 
           </div>
 
-        ) : (
 
-          <div className="space-y-5">
+          {/* COMMENT */}
 
-            {meals.map(
-              (meal, index) => {
+          <div className="mb-6">
 
-                const pastDate =
-                  isLocked(
-                    meal.date
-                  );
+            <label
+              className={`text-sm font-bold ${
+                isDark
+                  ? 'text-white'
+                  : 'text-slate-900'
+              }`}
+            >
+
+              How should it be cooked?
+
+            </label>
 
 
-                return (
-                  <motion.div
-                    key={meal.id}
-                    initial={{
-                      opacity: 0,
-                      y: 10,
-                    }}
-                    animate={{
-                      opacity: 1,
-                      y: 0,
-                    }}
-                    transition={{
-                      delay:
-                        index * 0.02,
-                    }}
-                    className={`rounded-3xl border p-5 sm:p-6 ${
+            <textarea
+              value={cookingComment}
+              onChange={e =>
+                setCookingComment(e.target.value)
+              }
+              rows={5}
+              placeholder="Example: কম ঝাল, আলু বেশি, ঝোল একটু বেশি রাখতে হবে..."
+              className={`w-full mt-2 px-4 py-3 rounded-xl border outline-none resize-none ${
+                isDark
+                  ? 'bg-slate-900 border-white/10 text-white placeholder:text-slate-600'
+                  : 'bg-white border-slate-200 text-slate-900'
+              }`}
+            />
+
+          </div>
+
+
+          {/* MESSAGE */}
+
+          {message && (
+
+            <div
+              className={`mb-5 p-4 rounded-xl text-sm ${
+                message.includes('successfully') ||
+                message.includes('removed')
+                  ? 'bg-emerald-500/10 text-emerald-500'
+                  : 'bg-red-500/10 text-red-500'
+              }`}
+            >
+
+              {message}
+
+            </div>
+
+          )}
+
+
+          {/* SAVE */}
+
+          <button
+            type="button"
+            disabled={saving}
+            onClick={savePreference}
+            className="w-full py-3.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-bold flex items-center justify-center gap-2"
+          >
+
+            {saving ? (
+              <Loader2
+                size={19}
+                className="animate-spin"
+              />
+            ) : (
+              <CheckCircle2 size={19} />
+            )}
+
+            {saving
+              ? 'Saving...'
+              : `Save ${
+                  mealTime === 'day'
+                    ? 'Day'
+                    : 'Night'
+                } Preference`
+            }
+
+          </button>
+
+
+          {/* CURRENT */}
+
+          {currentPreference && (
+
+            <div
+              className={`mt-6 p-5 rounded-2xl border ${
+                isDark
+                  ? 'bg-slate-900/60 border-white/5'
+                  : 'bg-slate-50 border-slate-200'
+              }`}
+            >
+
+              <div className="flex items-start justify-between gap-4">
+
+                <div>
+
+                  <p className="text-xs font-bold uppercase tracking-widest text-slate-500">
+
+                    Current Preference
+
+                  </p>
+
+
+                  <h3
+                    className={`text-lg font-bold mt-2 ${
                       isDark
-                        ? 'bg-slate-800/50 border-white/5'
-                        : 'bg-white border-slate-200 shadow-sm'
+                        ? 'text-white'
+                        : 'text-slate-900'
                     }`}
                   >
 
+                    {currentPreference.meal_name}
 
-                    {/* DATE HEADER */}
+                  </h3>
 
-                    <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-5">
 
-                      <div>
+                  {currentPreference.cooking_comment && (
 
-                        <p className="text-xs font-bold uppercase tracking-widest text-indigo-500">
+                    <p className="text-sm text-slate-500 mt-2">
 
-                          {meal.date ===
-                          today
-                            ? 'Today'
-                            : pastDate
-                            ? 'Past'
-                            : 'Upcoming'}
+                      {currentPreference.cooking_comment}
 
-                        </p>
+                    </p>
 
-
-                        <h2
-                          className={`text-xl font-bold mt-1 ${
-                            isDark
-                              ? 'text-white'
-                              : 'text-slate-900'
-                          }`}
-                        >
-                          {formatDate(
-                            meal.date
-                          )}
-                        </h2>
-
-                      </div>
-
-
-                      <p
-                        className={`text-xs rounded-xl px-3 py-2 ${
-                          isDark
-                            ? 'bg-white/5 text-slate-400'
-                            : 'bg-slate-50 text-slate-500'
-                        }`}
-                      >
-                        {pastDate
-                          ? 'Past preference'
-                          : 'Editable for the day'}
-                      </p>
-
-                    </div>
-
-
-                    {/* =================================================
-                        LUNCH + DINNER
-                    ================================================= */}
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-
-
-                      {/* LUNCH */}
-
-                      <PreferenceSelect
-                        icon={
-                          <Sun
-                            size={19}
-                            className="text-amber-500"
-                          />
-                        }
-                        label="Day / Lunch"
-                        value={
-                          meal.day_preference ||
-                          ''
-                        }
-                        menu={
-                          meal.day_menu_name
-                        }
-                        locked={
-                          pastDate
-                        }
-                        saving={
-                          savingKey ===
-                          `${meal.id}-day`
-                        }
-                        dark={
-                          isDark
-                        }
-                        onChange={(
-                          value
-                        ) =>
-                          savePreference(
-                            meal,
-                            'day',
-                            value
-                          )
-                        }
-                      />
-
-
-                      {/* DINNER */}
-
-                      <PreferenceSelect
-                        icon={
-                          <Moon
-                            size={19}
-                            className="text-indigo-500"
-                          />
-                        }
-                        label="Night / Dinner"
-                        value={
-                          meal.night_preference ||
-                          ''
-                        }
-                        menu={
-                          meal.night_menu_name
-                        }
-                        locked={
-                          pastDate
-                        }
-                        saving={
-                          savingKey ===
-                          `${meal.id}-night`
-                        }
-                        dark={
-                          isDark
-                        }
-                        onChange={(
-                          value
-                        ) =>
-                          savePreference(
-                            meal,
-                            'night',
-                            value
-                          )
-                        }
-                      />
-
-                    </div>
-
-                  </motion.div>
-                );
-              }
-            )}
-
-          </div>
-        )}
-
-
-        {/* ======================================================
-            EVERYONE'S PREFERENCE
-        ====================================================== */}
-
-        <div
-          className={`mt-8 rounded-3xl border overflow-hidden ${
-            isDark
-              ? 'bg-slate-800/50 border-white/5'
-              : 'bg-white border-slate-200 shadow-sm'
-          }`}
-        >
-
-          <div
-            className={`p-5 border-b ${
-              isDark
-                ? 'border-white/5'
-                : 'border-slate-200'
-            }`}
-          >
-
-            <div className="flex items-center gap-2">
-
-              <Users
-                size={19}
-                className="text-indigo-500"
-              />
-
-
-              <h2
-                className={`font-bold text-lg ${
-                  isDark
-                    ? 'text-white'
-                    : 'text-slate-900'
-                }`}
-              >
-                Everyone's Preferences
-              </h2>
-
-            </div>
-
-
-            <p className="text-xs mt-1 text-slate-500">
-              Submitted preferences from members
-              of your mess.
-            </p>
-
-          </div>
-
-
-          {preferences.length === 0 ? (
-
-            <div className="p-10 text-center text-sm text-slate-500">
-              No preferences submitted yet.
-            </div>
-
-          ) : (
-
-            <div className="overflow-x-auto">
-
-              <table className="w-full min-w-[720px] text-left">
-
-                <thead>
-
-                  <tr
-                    className={
-                      isDark
-                        ? 'bg-slate-900/50'
-                        : 'bg-slate-50'
-                    }
-                  >
-
-                    <th className="px-5 py-3 text-xs uppercase tracking-widest text-slate-500">
-                      Date
-                    </th>
-
-
-                    <th className="px-5 py-3 text-xs uppercase tracking-widest text-slate-500">
-                      Meal
-                    </th>
-
-
-                    <th className="px-5 py-3 text-xs uppercase tracking-widest text-slate-500">
-                      Member
-                    </th>
-
-
-                    <th className="px-5 py-3 text-xs uppercase tracking-widest text-slate-500">
-                      Preference
-                    </th>
-
-                  </tr>
-
-                </thead>
-
-
-                <tbody
-                  className={`divide-y ${
-                    isDark
-                      ? 'divide-white/5'
-                      : 'divide-slate-100'
-                  }`}
-                >
-
-                  {preferences.map(
-                    (preference) => (
-
-                      <tr
-                        key={
-                          preference.id
-                        }
-                      >
-
-                        <td className="px-5 py-3 text-sm text-slate-400">
-
-                          {preference.meal?.date
-                            ? formatDate(
-                                preference
-                                  .meal
-                                  .date
-                              )
-                            : '-'}
-
-                        </td>
-
-
-                        <td className="px-5 py-3 text-sm font-semibold text-slate-400">
-
-                          {preference.meal_time ===
-                          'day'
-                            ? 'Lunch'
-                            : 'Dinner'}
-
-                        </td>
-
-
-                        <td
-                          className={`px-5 py-3 text-sm font-semibold ${
-                            isDark
-                              ? 'text-white'
-                              : 'text-slate-900'
-                          }`}
-                        >
-
-                          {preference
-                            .member
-                            ?.name ||
-                            'Member'}
-
-                        </td>
-
-
-                        <td
-                          className={`px-5 py-3 text-sm ${
-                            isDark
-                              ? 'text-slate-300'
-                              : 'text-slate-700'
-                          }`}
-                        >
-
-                          <span className="inline-flex items-center gap-2">
-
-                            <Check
-                              size={15}
-                              className="text-emerald-500"
-                            />
-
-                            {
-                              preference.preferred_item
-                            }
-
-                          </span>
-
-                        </td>
-
-                      </tr>
-
-                    )
                   )}
 
-                </tbody>
+                </div>
 
-              </table>
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    deletePreference(
+                      currentPreference.id
+                    )
+                  }
+                  className="text-sm text-red-500 font-semibold"
+                >
+
+                  Remove
+
+                </button>
+
+              </div>
 
             </div>
+
           )}
 
         </div>
@@ -1107,209 +768,8 @@ export default function MemberMealPreferences() {
       </div>
 
     </MemberLayout>
+
   );
-}
 
-
-// ============================================================
-// PREFERENCE SELECT COMPONENT
-// ============================================================
-
-function PreferenceSelect({
-  icon,
-  label,
-  value,
-  menu,
-  locked,
-  saving,
-  dark,
-  onChange,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: string;
-  menu: string | null;
-  locked: boolean;
-  saving: boolean;
-  dark: boolean;
-  onChange: (
-    value: string
-  ) => void;
-}) {
-
-
-  // ==========================================================
-  // ADMIN'S MENU → MEMBER'S OPTIONS
-  // ==========================================================
-
-  /*
-   * Admin sets:
-   *
-   * "Alu Bhorta"
-   *
-   * Member sees:
-   *
-   * Select preferred item
-   * Alu Bhorta
-   *
-   *
-   * If admin sets:
-   *
-   * "Alu Bhorta, Chicken Curry, Fish"
-   *
-   * Member sees:
-   *
-   * Alu Bhorta
-   * Chicken Curry
-   * Fish
-   *
-   * So Member cannot create an arbitrary food item.
-   */
-
-  const options = menu
-    ? menu
-        .split(',')
-        .map(
-          (item) =>
-            item.trim()
-        )
-        .filter(Boolean)
-    : [];
-
-
-  return (
-    <div
-      className={`rounded-2xl border p-4 ${
-        dark
-          ? 'bg-white/[0.02] border-white/5'
-          : 'bg-slate-50 border-slate-200'
-      }`}
-    >
-
-
-      {/* HEADER */}
-
-      <div className="flex items-center justify-between mb-3">
-
-        <div className="flex items-center gap-2">
-
-          {icon}
-
-          <span
-            className={`font-bold ${
-              dark
-                ? 'text-white'
-                : 'text-slate-900'
-            }`}
-          >
-            {label}
-          </span>
-
-        </div>
-
-
-        {saving ? (
-
-          <Loader2
-            size={17}
-            className="animate-spin text-indigo-500"
-          />
-
-        ) : value ? (
-
-          <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-500">
-
-            <Check size={13} />
-
-            SELECTED
-
-          </span>
-
-        ) : null}
-
-      </div>
-
-
-      {/* ADMIN MENU DISPLAY */}
-
-      <div
-        className={`mb-3 rounded-xl px-3 py-2 text-xs ${
-          dark
-            ? 'bg-indigo-500/10 text-indigo-300'
-            : 'bg-indigo-50 text-indigo-700'
-        }`}
-      >
-
-        <span className="font-semibold">
-          Admin Menu:
-        </span>{' '}
-
-        {menu || 'Menu not set yet'}
-
-      </div>
-
-
-      {/* PREFERENCE SELECT */}
-
-      <select
-        disabled={
-          locked ||
-          saving ||
-          !menu
-        }
-        value={value}
-        onChange={(event) =>
-          onChange(
-            event.target.value
-          )
-        }
-        className={`w-full rounded-xl border px-3 py-3 outline-none focus:ring-2 focus:ring-indigo-500 ${
-          dark
-            ? 'bg-slate-900/60 border-white/10 text-white'
-            : 'bg-white border-slate-200 text-slate-800'
-        }`}
-      >
-
-        <option value="">
-          {!menu
-            ? 'Admin has not set menu'
-            : locked
-            ? 'Past date'
-            : value
-            ? value
-            : 'Select preferred item'}
-        </option>
-
-
-        {options.map(
-          (option) => (
-
-            <option
-              key={option}
-              value={option}
-            >
-              {option}
-            </option>
-
-          )
-        )}
-
-      </select>
-
-
-      {/* STATUS */}
-
-      <p className="text-[11px] mt-2 text-slate-500">
-
-        {locked
-          ? 'This is a past date and cannot be changed.'
-          : menu
-          ? 'You can change your preference anytime during this day.'
-          : 'Admin needs to set the menu first.'}
-
-      </p>
-
-    </div>
-  );
 }
 

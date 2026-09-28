@@ -5,10 +5,13 @@ import { useAuth } from '../../context/AuthContext';
 export type MealWithRecord = {
   id: string;
   date: string;
+
   day_menu_name?: string | null;
   day_menu_image?: string | null;
+
   night_menu_name?: string | null;
   night_menu_image?: string | null;
+
   record: {
     id: string;
     day_meal: boolean;
@@ -18,16 +21,49 @@ export type MealWithRecord = {
 
 export function useMealsData() {
   const { profile } = useAuth();
-  const [meals, setMeals] = useState<MealWithRecord[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [isDark, setIsDark] = useState(() => localStorage.getItem('memberTheme') !== 'light');
 
-  // Theme Sync
+  const [meals, setMeals] =
+    useState<MealWithRecord[]>([]);
+
+  const [loading, setLoading] =
+    useState(true);
+
+  const [isDark, setIsDark] =
+    useState(
+      () =>
+        localStorage.getItem(
+          'memberTheme'
+        ) !== 'light'
+    );
+
+  // ============================================================
+  // THEME
+  // ============================================================
+
   useEffect(() => {
-    const checkTheme = () => setIsDark(localStorage.getItem('memberTheme') !== 'light');
-    const interval = setInterval(checkTheme, 50);
-    return () => clearInterval(interval);
+    const checkTheme = () => {
+      setIsDark(
+        localStorage.getItem(
+          'memberTheme'
+        ) !== 'light'
+      );
+    };
+
+    const interval =
+      window.setInterval(
+        checkTheme,
+        100
+      );
+
+    return () =>
+      window.clearInterval(
+        interval
+      );
   }, []);
+
+  // ============================================================
+  // LOAD MEALS
+  // ============================================================
 
   useEffect(() => {
     if (profile) {
@@ -35,86 +71,259 @@ export function useMealsData() {
     }
   }, [profile]);
 
+  // ============================================================
+  // FETCH
+  // ============================================================
+
   const fetchMeals = async () => {
     try {
-      const memberId = (profile as any).id;
-      const hostelId = (profile as any).hostel_id;
+      setLoading(true);
 
-      const { data: mealsData, error } = await supabase
+      const memberId =
+        (profile as any)?.id;
+
+      const hostelId =
+        (profile as any)?.hostel_id;
+
+      if (!memberId || !hostelId) {
+        setMeals([]);
+        return;
+      }
+
+      const {
+        data: mealsData,
+        error: mealsError,
+      } = await supabase
         .from('meals')
-        .select('*')
-        .eq('hostel_id', hostelId)
-        .order('date', { ascending: false });
+        .select(`
+          id,
+          date,
+          day_menu_name,
+          day_menu_image,
+          night_menu_name,
+          night_menu_image
+        `)
+        .eq(
+          'hostel_id',
+          hostelId
+        )
+        .order('date', {
+          ascending: false,
+        });
 
-      if (error) throw error;
+      if (mealsError) {
+        throw mealsError;
+      }
 
-      const mealsWithRecords = await Promise.all(
-        (mealsData || []).map(async (meal) => {
-          const { data: record } = await supabase
-            .from('meal_records')
-            .select('*')
-            .eq('meal_id', meal.id)
-            .eq('member_id', memberId)
-            .maybeSingle();
+      const mealsWithRecords =
+        await Promise.all(
+          (mealsData || []).map(
+            async (meal) => {
 
-          return {
-            id: meal.id,
-            date: meal.date,
-            day_menu_name: meal.day_menu_name,
-            day_menu_image: meal.day_menu_image,
-            night_menu_name: meal.night_menu_name,
-            night_menu_image: meal.night_menu_image,
-            record: record || null,
-          };
-        })
+              const {
+                data: record,
+                error:
+                  recordError,
+              } = await supabase
+                .from(
+                  'meal_records'
+                )
+                .select(`
+                  id,
+                  day_meal,
+                  night_meal
+                `)
+                .eq(
+                  'meal_id',
+                  meal.id
+                )
+                .eq(
+                  'member_id',
+                  memberId
+                )
+                .maybeSingle();
+
+              if (recordError) {
+                console.error(
+                  'Meal record error:',
+                  recordError
+                );
+              }
+
+              return {
+                id: meal.id,
+                date: meal.date,
+
+                day_menu_name:
+                  meal.day_menu_name,
+
+                day_menu_image:
+                  meal.day_menu_image,
+
+                night_menu_name:
+                  meal.night_menu_name,
+
+                night_menu_image:
+                  meal.night_menu_image,
+
+                record:
+                  record || null,
+              };
+            }
+          )
+        );
+
+      setMeals(
+        mealsWithRecords
       );
-
-      setMeals(mealsWithRecords);
     } catch (error) {
-      console.error('Error fetching meals:', error);
+      console.error(
+        'Error fetching meals:',
+        error
+      );
     } finally {
       setLoading(false);
     }
   };
 
-  const toggleMeal = async (meal: MealWithRecord, type: 'day' | 'night') => {
-    const now = new Date();
-    const cutoffTime = new Date(`${meal.date}${type === 'day' ? 'T08:00:00' : 'T20:00:00'}`);
-    
-    if (now > cutoffTime) {
-      alert(`Time is over! You cannot update the ${type} meal for this date anymore.`);
-      return;
-    }
+  // ============================================================
+  // TOGGLE DAY / NIGHT
+  //
+  // IMPORTANT:
+  // NO TIME LIMIT
+  // NO 08:00 AM
+  // NO 08:00 PM
+  // ============================================================
 
+  const toggleMeal = async (
+    meal: MealWithRecord,
+    type: 'day' | 'night'
+  ) => {
     try {
-      const memberId = (profile as any).id;
+      const memberId =
+        (profile as any)?.id;
 
-      if (meal.record?.id) {
-        const { error } = await supabase
-          .from('meal_records')
-          .update({
-            [type === 'day' ? 'day_meal' : 'night_meal']:
-              type === 'day' ? !meal.record.day_meal : !meal.record.night_meal,
-          })
-          .eq('id', meal.record.id);
-
-        if (error) throw error;
-      } else {
-        const { error } = await supabase.from('meal_records').insert({
-          meal_id: meal.id,
-          member_id: memberId,
-          day_meal: type === 'day',
-          night_meal: type === 'night',
-        });
-
-        if (error) throw error;
+      if (!memberId) {
+        throw new Error(
+          'Member information not found.'
+        );
       }
 
+      // --------------------------------------------------------
+      // NEW VALUE
+      // --------------------------------------------------------
+
+      const currentValue =
+        type === 'day'
+          ? meal.record?.day_meal ??
+            false
+          : meal.record?.night_meal ??
+            false;
+
+      const newValue =
+        !currentValue;
+
+      // --------------------------------------------------------
+      // UPDATE EXISTING RECORD
+      // --------------------------------------------------------
+
+      if (meal.record?.id) {
+
+        const updateData =
+          type === 'day'
+            ? {
+                day_meal:
+                  newValue,
+              }
+            : {
+                night_meal:
+                  newValue,
+              };
+
+        const {
+          error,
+        } = await supabase
+          .from(
+            'meal_records'
+          )
+          .update(
+            updateData
+          )
+          .eq(
+            'id',
+            meal.record.id
+          )
+          .eq(
+            'member_id',
+            memberId
+          );
+
+        if (error) {
+          throw error;
+        }
+      }
+
+      // --------------------------------------------------------
+      // CREATE NEW RECORD
+      // --------------------------------------------------------
+
+      else {
+
+        const {
+          error,
+        } = await supabase
+          .from(
+            'meal_records'
+          )
+          .insert({
+            meal_id:
+              meal.id,
+
+            member_id:
+              memberId,
+
+            day_meal:
+              type === 'day'
+                ? newValue
+                : false,
+
+            night_meal:
+              type === 'night'
+                ? newValue
+                : false,
+          });
+
+        if (error) {
+          throw error;
+        }
+      }
+
+      // --------------------------------------------------------
+      // REFRESH
+      // --------------------------------------------------------
+
       await fetchMeals();
+
     } catch (error: any) {
-      alert(error.message);
+
+      console.error(
+        'Toggle meal error:',
+        error
+      );
+
+      alert(
+        error?.message ||
+          'Could not update meal.'
+      );
     }
   };
 
-  return { meals, loading, isDark, toggleMeal };
+  return {
+    meals,
+    loading,
+    isDark,
+    toggleMeal,
+    refreshMeals:
+      fetchMeals,
+  };
 }
